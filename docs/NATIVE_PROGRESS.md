@@ -443,3 +443,10 @@ Added an explicit SDK/ABI-only workflow input, defaulting to full upstream tests
 to verify build-system changes without repeating the unchanged ~30-minute
 upstream suite. The new scoped run and old full Windows result follow below;
 scoped CI is not presented as a full product or terminal gate.
+
+SDK/ABI-only run 40040999111 passed Windows but exposed a GCC portability issue
+once Linux archive discovery worked: the ABI test used `std::uint8_t` without
+including `<cstdint>`, accidentally relying on MSVC transitive includes. Added
+the explicit include and audited the adapter's integer/size includes as well.
+No ABI assertion was removed. Native core/crypto checks at 81b07ad passed in run
+40040998462; the next SDK/ABI-only run verifies this final integration fix.

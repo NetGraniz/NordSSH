@@ -4,6 +4,7 @@
 #include <QString>
 #include <QVector>
 #include <memory>
+#include <cstddef>
 
 class QKeyEvent;
 class QMouseEvent;

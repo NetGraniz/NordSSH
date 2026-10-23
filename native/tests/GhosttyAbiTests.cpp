@@ -2,6 +2,7 @@
 #include <ghostty/vt.h>
 #include <array>
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>
