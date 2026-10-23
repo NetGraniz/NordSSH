@@ -109,25 +109,25 @@
       "tag": "openssl-3.5.9",
       "tagCommit": "45e844fa2a14ec92d146bd8f5778ac130b6625fb",
       "sourceUrl": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
-      "sourceArchiveSha256": null,
+      "sourceArchiveSha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
       "license": "Apache-2.0",
-      "status": "candidate LTS version; archive hash/signature and build integration not verified"
+      "status": "source hash matches official checksum and release digest; detached signature mathematically verified against pinned primary-key fingerprint B146647E45A7B33947AB226B2A2C87D161692D40, not a full revocation/trust assessment; Windows in-memory crypto tests pass, complete installation/packaging pending"
     },
     "libssh": {
       "version": "0.12.2",
       "sourceUrl": "https://www.libssh.org/files/0.12/libssh-0.12.2.tar.xz",
-      "sourceArchiveSha256": null,
+      "sourceArchiveSha256": "49560f677d96e3706a904ac2de1116e25f3680937d51e5c92198fcba4a1c1e9f",
       "licenseReview": "LGPL; verify exact SPDX expression from this version's COPYING before shipping",
-      "status": "candidate patched baseline; archive hash/signature and build integration not verified"
+      "status": "source acquired; detached signature mathematically verified against pinned official fingerprint 88A228D89B07C2C77D0C780903D5DF8CFDD3E8E7, not a full revocation/trust assessment; build/integration pending"
     },
     "argon2": {
       "version": "20190702",
       "repository": "https://github.com/P-H-C/phc-winner-argon2.git",
       "tag": "20190702",
       "tagCommit": "62358ba2123abd17fccf2a108a301d4b52c01a7c",
-      "sourceArchiveSha256": null,
+      "sourceArchiveSha256": "daf972a89577f8772602bf2eb38b6a3dd3d922bf5724d45e7f9589b5e830442c",
       "license": "Apache-2.0 OR CC0-1.0",
-      "status": "candidate upstream tag; archive hash and build integration not verified"
+      "status": "source hash enforced by native/cmake/Argon2.cmake; Windows RFC and application-profile vector tests pass; release dependency/license review pending"
     }
   },
   "rejectedExperiments": [

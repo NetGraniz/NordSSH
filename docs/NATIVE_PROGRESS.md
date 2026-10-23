@@ -1,7 +1,7 @@
 # Native implementation evidence
 
 Date: 2026-10-23. This is an engineering checkpoint, not a release announcement.
-The new client does not yet support real SSH/SFTP connections or vault encryption.
+The new client does not yet support real SSH/SFTP connections or on-disk vaults.
 The user is not asked to test intermediate harnesses or mock interfaces.
 
 ## Completed locally
@@ -53,6 +53,39 @@ The official Zig 0.17.0 download was hash-verified; initial test attempts hit Zi
 TLS/cache acquisition problems, not failed executed VT assertions. A retry is
 being evaluated; neither its runtime test gate nor ReleaseSafe build is yet
 recorded as passed. Do not infer success from a running compiler.
+
+## Second checkpoint: authenticated encryption
+
+Implemented `native/src/vault/VaultCrypto.*` and tests, using OpenSSL 3.5.9
+and hash-pinned Argon2 20190702. The OpenSSL source archive was checked against
+upstream SHA256/GitHub digest and a mathematically verified detached signature;
+the signature check is not a full OpenPGP revocation/trust assessment. Acquisition
+records are in local `.tools/nordssh-deps/{acquisition,verification}.json`.
+
+Windows MSVC Debug CTest passed `vault_crypto` (6.96 s) and `vault_format`
+(0.03 s). Tests used the freshly built OpenSSL source-tree DLL/import library;
+the complete OpenSSL installation and packaging gate were not yet complete.
+
+Executed assertions cover:
+
+- Official AES-256-GCM known-answer vectors with and without AAD, including tag
+  failure and empty low-level GCM input. Vault payloads cannot be empty.
+- RFC 9106 section 5.3 Argon2id vector and the application's fixed 64 MiB/t3/p1
+  profile against separately packaged argon2-cffi output.
+- Opening a frozen envelope generated independently by argon2-cffi 25.1.0 /
+  bindings 26.1.0 and cryptography 50.0.2. The deterministic generator is checked
+  in under `native/tests/reference/`; its fixed secrets/nonces are synthetic only.
+- Password/key opening, wrong password/key, mutation of every file byte including
+  the wrapping tuple during device-key opening, truncation, trailing bytes,
+  cross-vault wrapper splicing, revision increment, fresh save nonce and unchanged
+  password wrapper during ordinary save.
+- Move-only secret ownership; cleansing is implemented with OpenSSL clear/free.
+  This is not a claim of protection against crash dumps or same-user malware.
+
+These are in-memory cryptographic envelopes, not a complete vault service. Strict
+JSON/schema validation, disk transactions/ACLs/locking, cancellation, RNG/provider
+fault injection and device storage still require their own tests. Unauthenticated
+plaintext is kept private and cleansed on failure; no JSON is parsed by this layer.
 
 ## Next exit criteria
 

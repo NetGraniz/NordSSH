@@ -7,7 +7,12 @@ is not used by these targets.
 Current product modules:
 
 - `nordssh_vault_format`: bounded UTF-8 password and binary-header admission,
-  exact AAD construction. No encryption, persistence or unlocked vault model yet.
+  exact AAD construction.
+- `nordssh_vault_crypto`: AES-256-GCM/Argon2id authenticated in-memory envelopes,
+  cleansed move-only secrets, fresh-nonce saves and device-key opening. Optional
+  `NORDSSH_BUILD_CRYPTO=ON` requires OpenSSL 3.5.9; Argon2 source is hash-pinned.
+  JSON schema validation, disk persistence and an unlocked product model are not
+  implemented by this layer. Never use authenticated bytes as validated records.
 - `nordssh_input`: one paste event route for a future terminal widget. Tests send
   synthetic Qt events; they do not inspect the user's clipboard or prove actual
   keyboard-layout/IME behavior on a desktop session.
