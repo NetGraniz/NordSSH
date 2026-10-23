@@ -311,3 +311,7 @@ validation. The first dispatched run was cancelled rather than left to consume
 runner time on that known compile error. Filtered Windows `RealPath` tests now
 pass (69 passes, two Linux-only skips across overlapping executables). These
 Windows results do not execute the Linux-specific regression.
+
+The Windows runner then exposed CRLF conversion of the patch file itself,
+before compilation. Added an LF checkout attribute for `.patch` files; patch
+application continues to use strict whitespace/error checks on both platforms.

@@ -1,3 +1,2 @@
-# Signature fixtures must remain byte-identical on Windows and Linux.
-test/fixtures/update-test.txt -text
-*.sh text eol=lf
+# Unified patches are applied byte-for-byte to upstream LF sources on both OSes.
+*.patch text eol=lf
