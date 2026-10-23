@@ -10,8 +10,10 @@
 - Keep UI status honest: planned features and mocks are not working SSH sessions.
 - Never bypass host-key validation, accept changed keys silently, log secrets,
   or pass passwords in process arguments.
-- Use user-scoped Windows protection for local secrets. A master password is not
-  required for opening local vaults. Portable secret exports need separate encryption.
+- Keep the vault format independent of the OS. Use password-protected portable
+  encryption, with optional Windows DPAPI/Linux Secret Service ONLY for remembering
+  the device unlock key. Do not save a plaintext unlock key beside a portable vault.
+  Retain the old DPAPI file unchanged during migration.
 - Updates must verify signatures, preserve data and require confirmation before
   interrupting live sessions or transfers. Do not publish an installer until its
   installation and upgrade path have been tested.

@@ -52,6 +52,10 @@ impl Host {
 pub struct Secret {
     pub password: String,
     pub passphrase: String,
+    #[serde(default)]
+    pub private_key: String,
+    #[serde(default)]
+    pub certificate: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -133,6 +137,16 @@ impl Vault {
             {
                 return Err("Invalid snippet".into());
             }
+        }
+        if self.secrets.len() > 2000
+            || self.secrets.values().any(|s| {
+                s.password.len() > 16384
+                    || s.passphrase.len() > 16384
+                    || s.private_key.len() > 1024 * 1024
+                    || s.certificate.len() > 1024 * 1024
+            })
+        {
+            return Err("Credential exceeds supported size limits".into());
         }
         self.settings.validate()
     }

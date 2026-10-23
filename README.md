@@ -1,97 +1,84 @@
 # NordSSH
 
-A Windows SSH and SFTP client with local connection vaults, customizable terminals
-and updates delivered through GitHub Releases.
+Local SSH and SFTP client for Windows and Linux. No cloud account, vault sync
+service or subscription. The first portable beta is `0.1.0-beta.1`.
 
-## Status
+## Connections and terminal
 
-Development build `0.1.0-dev.1`, not a stable release. The Windows frontend and
-Rust backend compile. No installer or signed automatic update has been published.
-Do not use this build as the only copy of important connection credentials.
+- Passwords, private keys and OpenSSH user certificates.
+- Terminal tabs, resizing, right-click paste, multiline/control-character paste
+  confirmation, two themes and adjustable font size.
+- Hosts organized by vault labels, favorites and search; saved command snippets.
+- Unknown server keys require confirmation before authentication. Changed trusted
+  keys are refused. Host-certificate CA trust is not implemented.
+- SFTP browsing, downloads finalized through a temporary local file, and uploads
+  using exclusive creation. Existing remote files are not overwritten. A failed
+  upload may leave a partial remote file.
 
-Implemented in the development source:
+## Local, portable vault
 
-- Password, private-key and OpenSSH user-certificate authentication with `russh`.
-- Interactive xterm.js terminal tabs, resizing, bounded output backpressure and
-  close confirmation for active connections/transfers.
-- Native confirmation of unknown plain host keys; changed keys are refused.
-- Windows user-scoped DPAPI vault, atomic replacement and schema validation.
-  Saved secrets are not returned in frontend snapshots.
-- Host folders (vault labels), favorites, search, saved snippets and two themes.
-- SFTP directory browsing, download through a temporary local file, and exclusive
-  upload creation. Existing remote files are not overwritten. A failed upload may
-  leave a partial remote file; resumable transfers are not implemented yet.
-- GitHub latest-stable-release checks in the window header. Installation remains
-  disabled until signed packages and the upgrade path are tested.
+The same password-encrypted `.nordvault` file works on Windows and Linux. It holds
+hosts, saved passwords, private keys, user certificates, trusted fingerprints,
+snippets and appearance settings. Encryption uses RustCrypto AES-256-GCM and
+Argon2id (64 MiB, three passes, parallelism one). A random vault key encrypts data;
+the password-derived key wraps that key. Format parameters are fixed and versioned,
+not accepted as unbounded work requests from imported files.
 
-Not implemented yet: portable export/import, terminal split views, SSH Agent,
-keyboard-interactive/2FA prompts, jump hosts, tunnels, transfer progress/cancellation,
-trusted host-certificate CAs, and signed update installation. The certificate option
-is for a user certificate plus its private key, not an X.509/TLS certificate.
+Choose a password of at least 12 characters at first use. Keep it separately:
+NordSSH cannot recover a forgotten password. **Remember on this device** avoids
+re-entering it on that computer. Only the unlock key is protected by Windows DPAPI
+or Linux Secret Service. A new computer needs the vault password once; device
+unlock records are not bundled in exports. If Secret Service is unavailable,
+password unlock still works. There is no plaintext fallback.
 
-## Build on Windows
+Settings provides encrypted export/import, locking and forgetting the remembered
+device key. Export bundles referenced key files; a missing referenced key causes
+an error rather than an incomplete backup. Import replaces the whole current vault
+after confirmation, retains an exact encrypted before-import backup, and does not
+merge. Only import trusted files: their server trust records are imported too.
+Active sessions must close before locking or importing.
 
-Prerequisites: Node.js 24, Rust 1.99.1 (MSVC), Visual Studio C++ Build Tools with a
-Windows SDK, and Microsoft Edge WebView2 Runtime. No production server is needed.
+An earlier Windows `vault.dpapi` is migrated after setting a portable-vault
+password. Its original file stays untouched. Saved secrets never appear in
+frontend snapshots. This is a beta, not an audited password manager; keep backups.
 
-```powershell
+## Portable mode and updates
+
+Extract the full portable archive into a writable folder. Keep `nordssh.portable`
+beside `NordSSH.exe` or `NordSSH.AppImage`. Data then lives in
+`NordSSH-data/vault.nordvault` beside the application, independently of the working
+directory. `--portable` enables the same mode. Without it, data lives in the
+platform app-data directory for `com.nordssh.desktop`.
+
+To update, close the program and replace the executable/AppImage, README and
+marker. **Keep `NordSSH-data` intact.** Remembered unlock material stays in the
+OS profile, outside the portable folder. Linux AppImage needs a compatible desktop
+and may need FUSE or extract-and-run mode. Portable does not mean every operating
+system library is bundled.
+
+The header checks public GitHub Releases. Automatic download/installation remains
+disabled until signed artifacts and the installer upgrade path are verified.
+No GitHub token is embedded in the client. Update checks can be disabled.
+
+## Development
+
+Stack: Tauri 2, Rust, TypeScript, xterm.js, `russh`, `russh-sftp`. `ssh2` is a
+development-only loopback fixture, not a shipped Node.js runtime. Node.js 24 and
+Rust 1.99.1 are pinned by the build. Windows needs C++ Build Tools, a Windows SDK
+and WebView2; Linux needs Tauri's GTK/WebKit development packages.
+
+```text
 npm ci
 npm run build
 npm test
-cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1
+cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1
 npm run tauri -- dev
 ```
 
-The SSH integration test requires Node.js and uses a generated, loopback-only
-`ssh2` fixture. Its credentials and host key are synthetic. The browser UI test
-(`node test/ui.cjs`) uses mocked IPC and an isolated local Chrome profile; it is
-not evidence of a working native SSH session.
+Release builds run in GitHub Actions on Windows and Ubuntu 22.04. Loopback tests
+use generated synthetic keys and credentials, never production hosts. See
+TESTING.md for the scope and SECURITY.md for limitations.
 
-User data belongs in Tauri's Windows app data directory for `com.nordssh.desktop`,
-not next to the executable. Keep the original Windows profile and backups: copying
-a DPAPI vault alone to another account or computer is not a portable export.
-
-## Planned features
-
-- SSH password, private-key and OpenSSH certificate authentication.
-- Saved hosts organized by folders, tags and favorites.
-- Terminal tabs, split views, themes, fonts and keyboard shortcuts.
-- Right-click paste with confirmation for multiline commands.
-- Reusable command snippets; reconnecting must not replay them automatically.
-- SFTP browsing, uploads and downloads with transfer progress.
-- Local vaults without an application master password. Windows user-scoped DPAPI
-  protects saved secrets; this does not protect against malware running as that user.
-- Export without secrets, or password-encrypted portable export with secrets.
-- Explicit trust for server host keys, retained across restarts and export/import.
-  Changed host keys stop the connection until the user reviews the change.
-- SSH tunnels, jump hosts, keepalive and connection diagnostics.
-
-## Updates
-
-The window header will show **Check for updates**, **Update available**, download
-progress and **Restart and install**. Stable releases will be discovered through
-this repository's GitHub Releases. Automatic checks can be disabled; network
-errors must not prevent SSH or SFTP use.
-
-Installation is user-initiated by default. Active SSH sessions and SFTP transfers
-require explicit confirmation before the application closes. An optional automatic
-download setting must not enable unattended session termination.
-
-The planned Tauri updater will verify signed update artifacts using a public key
-embedded in the application. Signing private keys never belong in this repository.
-The updater must reject invalid signatures and must not fall back to unsigned
-installation. GitHub tokens must not be embedded in public application builds.
-
-Installing a newer version over the existing installation must preserve user data.
-User data lives outside the application installation directory. Schema migrations
-need verified backups, and an unsupported newer schema must not be overwritten.
-
-## Development direction
-
-Stack: Tauri 2, Rust, TypeScript and xterm.js. `russh` handles SSH and
-`russh-sftp` handles SFTP. SSH Agent support is pending. `ssh2` is a development-only
-test server dependency, not a Node.js runtime shipped in the desktop app.
-
-References: [Tauri updater](https://v2.tauri.app/plugin/updater/),
-[Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata),
-[OpenSSH](https://man.openbsd.org/ssh).
+Still pending: split panes, SSH Agent, keyboard-interactive/2FA prompts, tunnels,
+jump hosts, transfer progress/resume/cancellation, editable host-key trust and
+signed automatic installation. Account sync and telemetry are not part of NordSSH.

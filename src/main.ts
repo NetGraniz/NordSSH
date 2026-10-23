@@ -10,16 +10,17 @@ import type {
 } from "./types";
 import { needsPasteConfirmation, remoteJoin, boundedFontSize } from "./policy";
 import "./styles.css";
+import { vaultUI } from "./vault-ui";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
 <header><div class="brand">Nord<span>SSH</span></div><span class="version" id="version">development</span><div class="spacer"></div><button class="flat" id="updates">Проверить обновления</button><button class="primary" id="add-host">＋ Подключение</button></header>
-<aside><div class="sidebar-label">Рабочее пространство</div><button class="flat active" data-page="hosts">▦ &nbsp; Подключения</button><button class="flat" data-page="terminal">›_ &nbsp; Терминалы <span id="session-count"></span></button><button class="flat" data-page="snippets">⌘ &nbsp; Быстрые команды</button><div class="sidebar-label">Приложение</div><button class="flat" data-page="settings">⚙ &nbsp; Настройки</button><div class="sidebar-note"><span class="secure-dot"></span> Локальное хранилище<br>Секреты защищены Windows.<br>Без облачной учётной записи.</div></aside>
+<aside><div class="sidebar-label">Рабочее пространство</div><button class="flat active" data-page="hosts">▦ &nbsp; Подключения</button><button class="flat" data-page="terminal">›_ &nbsp; Терминалы <span id="session-count"></span></button><button class="flat" data-page="snippets">⌘ &nbsp; Быстрые команды</button><div class="sidebar-label">Приложение</div><button class="flat" data-page="settings">⚙ &nbsp; Настройки</button><div class="sidebar-note"><span class="secure-dot"></span> Локальное хранилище<br>Переносимый зашифрованный файл.<br>Без облачной учётной записи.</div></aside>
 <main><section class="page" id="hosts-page"><div class="page-top"><div><h2>Подключения</h2><span class="muted">Твои серверы. В одном месте.</span></div></div><div class="tools"><input id="search" placeholder="Поиск по имени, адресу или хранилищу" aria-label="Поиск серверов"><button id="favorites">☆ Избранное</button></div><div class="cards" id="hosts"></div><div class="empty" id="empty-hosts"><div class="empty-mark">&gt;_</div><h2>Первое подключение</h2><p>Добавь адрес сервера и способ входа. NordSSH запомнит подключение, а пароль сохранит только с твоего разрешения.</p><button class="primary" id="first-host">Добавить сервер</button></div></section>
 <section id="terminal-page" hidden style="flex:1;min-height:0;flex-direction:column"><div class="tabs" id="tabs"></div><div class="terminal-toolbar"><span class="secure-dot"></span><span id="terminal-status">Нет подключений</span><div class="spacer"></div><button id="toggle-sftp">SFTP</button><button id="paste">Вставить</button></div><div class="terminal-area" id="terminal-area"><div class="empty" id="empty-terminal"><div class="empty-mark">&gt;_</div><h2>Здесь будет терминал</h2><p>Подключись к серверу из списка слева. Демонстрационных подключений здесь нет.</p></div></div><div class="sftp" id="sftp" hidden><div class="sftp-toolbar"><button id="sftp-up" title="Родительская папка">↑</button><input id="sftp-path" value="." aria-label="Удалённый каталог"><button id="sftp-go">Открыть</button><button id="sftp-upload">Загрузить файл</button></div><div id="sftp-status" class="muted"></div><table><thead><tr><th>Имя</th><th>Размер</th><th></th></tr></thead><tbody id="sftp-rows"></tbody></table></div></section>
 <section class="page" id="snippets-page" hidden><div class="page-top"><div><h2>Быстрые команды</h2><span class="muted">Вставка в активный терминал — без автоматического выполнения.</span></div><div class="spacer"></div><button class="primary" id="add-snippet">＋ Команда</button></div><div id="snippets"></div></section>
-<section class="page" id="settings-page" hidden><div class="settings"><h2>Настройки</h2><div class="setting-row"><div>Цветовая тема<br><small>Интерфейс и терминал</small></div><select id="theme"><option value="nord">Nord · зелёный</option><option value="midnight">Midnight · фиолетовый</option></select></div><div class="setting-row"><div>Размер шрифта терминала</div><input id="font-size" type="number" min="11" max="24" value="14"></div><div class="setting-row"><label for="auto-updates">Проверять обновления при запуске</label><input id="auto-updates" type="checkbox"></div><div class="notice">Пароль для открытия NordSSH не нужен. Хранилище привязано к твоему пользователю Windows. Это не защита от вредоносных программ, запущенных под тем же пользователем.</div><h3>Стадия разработки</h3><p class="muted">SSH, терминалы, локальные настройки и SFTP проходят первые проверки. Переносимый экспорт, разделение терминалов, SSH Agent, туннели и установка подписанных обновлений ещё не подключены. Эта сборка не предназначена для единственной копии важных доступов.</p></div></section></main>
-<footer><span id="footer-status">Загрузка хранилища…</span><div class="spacer"></div><span>NordSSH · Windows</span></footer>
+<section class="page" id="settings-page" hidden><div class="settings"><h2>Настройки</h2><div class="setting-row"><div>Цветовая тема<br><small>Интерфейс и терминал</small></div><select id="theme"><option value="nord">Nord · зелёный</option><option value="midnight">Midnight · фиолетовый</option></select></div><div class="setting-row"><div>Размер шрифта терминала</div><input id="font-size" type="number" min="11" max="24" value="14"></div><div class="setting-row"><label for="auto-updates">Проверять обновления при запуске</label><input id="auto-updates" type="checkbox"></div><div class="notice">Данные хранятся только локально. Пароль нужен для переноса и восстановления; на своём устройстве разблокировку можно запомнить. Сохрани пароль отдельно от программы.</div><h3>Бета-версия</h3><p class="muted">Разделение терминалов, SSH Agent, туннели и установка подписанных обновлений ещё не подключены. Сохраняй отдельные резервные копии важных доступов.</p></div></section></main>
+<footer><span id="footer-status">Загрузка хранилища…</span><div class="spacer"></div><span>NordSSH · Windows / Linux</span></footer>
 <dialog id="host-dialog"><form id="host-form"><h2 id="host-title">Новое подключение</h2><div class="form-grid"><label class="field full">Название<input name="name" required maxlength="256" placeholder="Мой сервер"></label><label class="field">Адрес<input name="hostname" required maxlength="256" placeholder="192.168.1.10"></label><label class="field">Порт<input name="port" type="number" value="22" min="1" max="65535" required></label><label class="field">Пользователь<input name="username" required maxlength="256" placeholder="administrator"></label><label class="field">Хранилище<input name="vault" value="Личное" required maxlength="256"></label><label class="field full">Способ входа<select name="auth"><option value="password">Пароль</option><option value="key">Приватный ключ</option><option value="certificate">Ключ + сертификат OpenSSH</option></select></label><label class="field full" id="password-field">Пароль<input name="password" type="password" autocomplete="off" placeholder="Оставь пустым, чтобы сохранить прежний"></label><div class="field full" id="key-field" hidden><label>Приватный ключ</label><div class="key-picker"><input name="keyPath" readonly aria-label="Приватный ключ"><button type="button" id="choose-key">Выбрать</button></div><label>Парольная фраза ключа</label><input name="passphrase" type="password" autocomplete="off"></div><div class="field full" id="cert-field" hidden><label>Сертификат OpenSSH</label><div class="key-picker"><input name="certificatePath" readonly aria-label="Сертификат"><button type="button" id="choose-cert">Выбрать</button></div></div><label class="field inline"><input name="saveSecret" type="checkbox" checked> Сохранить доступ в Windows</label><label class="field inline"><input name="favorite" type="checkbox"> Избранное</label></div><p class="error" id="host-error"></p><div class="form-actions"><button type="button" id="cancel-host">Отмена</button><button class="primary" type="submit">Сохранить</button></div></form></dialog>
 <dialog id="credential-dialog"><form id="credential-form"><h2>Данные для подключения</h2><p class="muted">Сохранённый доступ не подошёл или отсутствует. Эти данные используются только для одной попытки подключения.</p><label class="field">Пароль / парольная фраза<input id="one-time-secret" type="password" autocomplete="off"></label><div class="form-actions"><button type="button" id="cancel-credential">Отмена</button><button type="submit" class="primary">Подключиться</button></div></form></dialog>
 <dialog id="snippet-dialog"><form id="snippet-form"><h2>Быстрая команда</h2><label class="field">Название<input name="name" required maxlength="256"></label><br><label class="field">Текст<textarea name="command" required rows="5" maxlength="16384" spellcheck="false"></textarea></label><p class="muted">Команда вставится в терминал. Для выполнения нажми Enter.</p><div class="form-actions"><button type="button" id="cancel-snippet">Отмена</button><button type="submit" class="primary">Сохранить</button></div></form></dialog>`;
@@ -27,6 +28,10 @@ app.innerHTML = `
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
+const saveSecretLabel = app.querySelector<HTMLInputElement>(
+  'input[name="saveSecret"]',
+)!.parentElement!;
+saveSecretLabel.lastChild!.textContent = " Сохранить доступ в хранилище";
 function action(label: string, run: () => void, cls = ""): HTMLButtonElement {
   const b = document.createElement("button");
   b.textContent = label;
@@ -484,7 +489,7 @@ async function pasteClipboard(tab: Tab) {
     await pasteText(tab, await navigator.clipboard.readText());
   } catch {
     toast(
-      "Windows не разрешила чтение буфера. Используй Ctrl+Shift+V или проверь разрешение буфера обмена.",
+      "Не удалось прочитать буфер. Используй Ctrl+Shift+V или проверь разрешение буфера обмена.",
     );
   }
 }
@@ -692,13 +697,33 @@ async function checkUpdates(quiet = false) {
   }
 }
 el("updates").onclick = () => void checkUpdates();
-void refresh()
-  .then(() => {
+void vaultUI(
+  async () => {
+    await refresh();
     if (snapshot.settings.checkUpdates) void checkUpdates(true);
-  })
-  .catch((e) => {
-    el("footer-status").textContent = "Не удалось открыть хранилище";
-    toast(message(e));
-    el<HTMLButtonElement>("add-host").disabled = true;
-    el<HTMLButtonElement>("first-host").disabled = true;
-  });
+  },
+  () => {
+    for (const tab of tabs.values()) {
+      tab.terminal.dispose();
+      tab.pane.remove();
+    }
+    tabs.clear();
+    activeSession = undefined;
+    renderTabs();
+    snapshot = {
+      hosts: [],
+      snippets: [],
+      settings: { theme: "nord", fontSize: 14, checkUpdates: false },
+      version: snapshot.version,
+    };
+    renderHosts();
+    renderSnippets();
+    hostForm.reset();
+  },
+  toast,
+).catch((e) => {
+  el("footer-status").textContent = "Не удалось открыть хранилище";
+  toast(message(e));
+  el<HTMLButtonElement>("add-host").disabled = true;
+  el<HTMLButtonElement>("first-host").disabled = true;
+});

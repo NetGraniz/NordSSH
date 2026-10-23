@@ -45,6 +45,7 @@ const path = require("node:path");
       import {mockIPC} from '/node_modules/@tauri-apps/api/mocks.js';
       const state={hosts:[],settings:{theme:'nord',fontSize:14,checkUpdates:false},snippets:[],version:'UI test'};
       mockIPC((command,args)=>{
+        if(command==='vault_status')return {initialized:true,unlocked:true,migration:false,path:'fixture.nordvault',portable:true};
         if(command==='snapshot')return structuredClone(state);
         if(command==='save_host'){state.hosts.push(args.host);return;}
         if(command==='save_settings'){state.settings=args.settings;return;}

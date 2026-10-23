@@ -21,6 +21,10 @@ id_ed25519*
 /local-data/
 /private/
 *.dpapi
+*.nordvault
+*.bak
+/NordSSH-data/
+/artifacts/
 /src-tauri/target/
 /src-tauri/gen/
 /test-results/

@@ -1,6 +1,6 @@
 [package]
 name = "nordssh"
-version = "0.1.0-dev.1"
+version = "0.1.0-beta.1"
 description = "NordSSH desktop client"
 authors = ["NetGraniz"]
 edition = "2024"
@@ -27,6 +27,12 @@ zeroize = { version = "1", features = ["derive"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 semver = "1"
+aes-gcm = "0.10.3"
+argon2 = { version = "0.5.3", features = ["zeroize"] }
+base64 = "0.22"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_System_Memory", "Win32_Foundation"] }

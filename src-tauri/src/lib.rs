@@ -1,3 +1,5 @@
+mod crypto;
+mod device;
 mod model;
 mod ssh;
 mod storage;
@@ -19,6 +21,7 @@ pub struct AppState {
     sessions: Arc<Mutex<HashMap<String, Arc<Session>>>>,
     pending: Arc<AtomicUsize>,
     transfers: AtomicUsize,
+    portable: bool,
 }
 #[derive(Serialize)]
 struct Snapshot {
@@ -28,8 +31,144 @@ struct Snapshot {
     version: String,
 }
 #[tauri::command]
+fn vault_status(state: State<AppState>) -> Result<storage::Status, String> {
+    Ok(state
+        .store
+        .lock()
+        .map_err(|_| "Vault lock unavailable")?
+        .status(state.portable))
+}
+#[tauri::command]
+async fn vault_unlock(
+    state: State<'_, AppState>,
+    password: String,
+    remember: bool,
+    create: bool,
+) -> Result<Option<String>, String> {
+    let password = zeroize::Zeroizing::new(password);
+    let store = state.store.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut s = store.lock().map_err(|_| "Vault lock unavailable")?;
+        if create {
+            s.initialize(&password, remember)
+        } else {
+            s.unlock(&password, remember)
+        }
+    })
+    .await
+    .map_err(|_| "Unlock task failed")?
+}
+fn idle(state: &AppState) -> Result<(), String> {
+    if state.pending.load(Ordering::SeqCst) > 0
+        || state.transfers.load(Ordering::SeqCst) > 0
+        || !state
+            .sessions
+            .lock()
+            .map_err(|_| "Session lock unavailable")?
+            .is_empty()
+    {
+        Err("Close active SSH sessions and transfers first".into())
+    } else {
+        Ok(())
+    }
+}
+#[tauri::command]
+fn vault_lock(state: State<AppState>) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|_| "Vault lock unavailable")?;
+    idle(&state)?;
+    store.lock();
+    Ok(())
+}
+#[tauri::command]
+fn vault_forget_device(state: State<AppState>) -> Result<(), String> {
+    state
+        .store
+        .lock()
+        .map_err(|_| "Vault lock unavailable")?
+        .forget_device()
+}
+#[tauri::command]
+async fn vault_export(state: State<'_, AppState>, password: String) -> Result<bool, String> {
+    let password = zeroize::Zeroizing::new(password);
+    let mut vault = {
+        let s = state.store.lock().map_err(|_| "Vault lock unavailable")?;
+        s.require_unlocked()?;
+        s.vault.clone()
+    };
+    // Bundle selected SSH key material, not just machine-specific file paths.
+    for host in &vault.hosts {
+        if host.auth != "password" {
+            let secret = vault.secrets.entry(host.id.clone()).or_default();
+            if secret.private_key.is_empty() {
+                secret.private_key = ssh::read_key_file(&host.key_path).await?;
+            }
+            if host.auth == "certificate" && secret.certificate.is_empty() {
+                secret.certificate = ssh::read_key_file(&host.certificate_path).await?;
+            }
+        }
+    }
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .set_title("Экспорт зашифрованного хранилища")
+        .set_file_name("NordSSH-export.nordvault")
+        .add_filter("NordSSH vault", &["nordvault"])
+        .save_file()
+        .await
+    else {
+        return Ok(false);
+    };
+    let path = file.path().to_owned();
+    let store = state.store.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let s = store.lock().map_err(|_| "Vault lock unavailable")?;
+        s.export(&path, &password, &vault)
+    })
+    .await
+    .map_err(|_| "Export task failed")??;
+    Ok(true)
+}
+#[tauri::command]
+async fn vault_import(
+    state: State<'_, AppState>,
+    password: String,
+    remember: bool,
+) -> Result<Option<String>, String> {
+    let password = zeroize::Zeroizing::new(password);
+    idle(&state)?;
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .set_title("Импорт зашифрованного хранилища")
+        .add_filter("NordSSH vault", &["nordvault"])
+        .pick_file()
+        .await
+    else {
+        return Err("Import cancelled".into());
+    };
+    let confirm=rfd::AsyncMessageDialog::new().set_title("Заменить текущее хранилище?").set_description("Импорт заменит список серверов, ключи и настройки. Текущий зашифрованный файл сохранится в резервной копии. Импортируйте только доверенный файл: он содержит также доверенные ключи серверов.").set_buttons(rfd::MessageButtons::YesNo).set_level(rfd::MessageLevel::Warning).show().await;
+    if confirm != rfd::MessageDialogResult::Yes {
+        return Err("Import cancelled".into());
+    }
+    let path = file.path().to_owned();
+    let store = state.store.clone();
+    let sessions = state.sessions.clone();
+    let pending = state.pending.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut s = store.lock().map_err(|_| "Vault lock unavailable")?;
+        if pending.load(Ordering::SeqCst) > 0
+            || !sessions
+                .lock()
+                .map_err(|_| "Session lock unavailable")?
+                .is_empty()
+        {
+            return Err("Close active sessions before importing".into());
+        }
+        s.import(&path, &password, remember)
+    })
+    .await
+    .map_err(|_| "Import task failed")?
+}
+#[tauri::command]
 fn snapshot(state: State<AppState>) -> Result<Snapshot, String> {
     let store = state.store.lock().map_err(|_| "Vault lock unavailable")?;
+    store.require_unlocked()?;
     Ok(Snapshot {
         hosts: store.vault.hosts.clone(),
         settings: store.vault.settings.clone(),
@@ -38,13 +177,39 @@ fn snapshot(state: State<AppState>) -> Result<Snapshot, String> {
     })
 }
 #[tauri::command]
-fn save_host(
-    state: State<AppState>,
+async fn save_host(
+    state: State<'_, AppState>,
     host: Host,
-    secret: Option<Secret>,
+    mut secret: Option<Secret>,
     forget_secret: bool,
 ) -> Result<(), String> {
     host.validate()?;
+    if !forget_secret && host.auth != "password" {
+        let mut credentials = secret.unwrap_or_else(|| {
+            state
+                .store
+                .lock()
+                .ok()
+                .and_then(|s| s.vault.secrets.get(&host.id).cloned())
+                .unwrap_or_default()
+        });
+        let saved_same = {
+            let store = state.store.lock().map_err(|_| "Vault lock unavailable")?;
+            store
+                .vault
+                .hosts
+                .iter()
+                .find(|h| h.id == host.id)
+                .is_some_and(|h| h.same_login_as(&host))
+        };
+        if !saved_same || credentials.private_key.is_empty() {
+            credentials.private_key = ssh::read_key_file(&host.key_path).await?;
+        }
+        if host.auth == "certificate" && (!saved_same || credentials.certificate.is_empty()) {
+            credentials.certificate = ssh::read_key_file(&host.certificate_path).await?;
+        }
+        secret = Some(credentials);
+    }
     if secret
         .as_ref()
         .is_some_and(|s| s.password.len() > 16384 || s.passphrase.len() > 16384)
@@ -179,9 +344,12 @@ async fn connect(
             .find(|h| h.id == host_id)
             .cloned()
             .ok_or("Host not found")?;
-        let credentials = secret
-            .or_else(|| s.vault.secrets.get(&host_id).cloned())
-            .unwrap_or_default();
+        s.require_unlocked()?;
+        let mut credentials = s.vault.secrets.get(&host_id).cloned().unwrap_or_default();
+        if let Some(input) = secret {
+            credentials.password = input.password.clone();
+            credentials.passphrase = input.passphrase.clone();
+        }
         (host, credentials)
     };
     let (session, channel, input) = ssh::open(host, secret, state.store.clone()).await?;
@@ -474,13 +642,26 @@ pub fn run() {
         }))
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
-            let store =
-                storage::Store::open(dir.join("vault.dpapi")).map_err(std::io::Error::other)?;
+            let executable = std::env::current_exe()?;
+            let appimage = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from);
+            let portable = storage::portable_root(
+                &executable,
+                appimage.as_deref(),
+                std::env::args().any(|s| s == "--portable"),
+            );
+            let root = portable.clone().unwrap_or_else(|| dir.clone());
+            let store = storage::Store::open_app(
+                root.join("vault.nordvault"),
+                dir.join("device-keys"),
+                &dir.join("vault.dpapi"),
+            )
+            .map_err(std::io::Error::other)?;
             app.manage(AppState {
                 store: Arc::new(Mutex::new(store)),
                 sessions: Arc::new(Mutex::new(HashMap::new())),
                 pending: Arc::new(AtomicUsize::new(0)),
                 transfers: AtomicUsize::new(0),
+                portable: portable.is_some(),
             });
             Ok(())
         })
@@ -508,6 +689,12 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            vault_status,
+            vault_unlock,
+            vault_lock,
+            vault_forget_device,
+            vault_export,
+            vault_import,
             snapshot,
             save_host,
             delete_host,

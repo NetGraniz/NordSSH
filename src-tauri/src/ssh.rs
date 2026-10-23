@@ -133,7 +133,11 @@ pub async fn open(
                 .map(|r| r.success())
                 .map_err(|_| "Password authentication failed".to_string())
         } else {
-            let text = Zeroizing::new(read_key_file(&host.key_path).await?);
+            let text = Zeroizing::new(if secret.private_key.is_empty() {
+                read_key_file(&host.key_path).await?
+            } else {
+                secret.private_key.clone()
+            });
             let phrase = if secret.passphrase.is_empty() {
                 None
             } else {
@@ -142,10 +146,13 @@ pub async fn open(
             let key = russh::keys::decode_secret_key(&text, phrase)
                 .map_err(|_| "Cannot decode private key; check format and passphrase")?;
             let result = if host.auth == "certificate" {
-                let cert = russh::keys::Certificate::from_openssh(
-                    read_key_file(&host.certificate_path).await?.trim(),
-                )
-                .map_err(|_| "Invalid OpenSSH certificate")?;
+                let certificate = if secret.certificate.is_empty() {
+                    read_key_file(&host.certificate_path).await?
+                } else {
+                    secret.certificate.clone()
+                };
+                let cert = russh::keys::Certificate::from_openssh(certificate.trim())
+                    .map_err(|_| "Invalid OpenSSH certificate")?;
                 handle
                     .authenticate_openssh_cert(&host.username, Arc::new(key), cert)
                     .await
@@ -191,7 +198,7 @@ pub async fn open(
     Ok((session, channel, rx))
 }
 
-async fn read_key_file(path: &str) -> Result<String, String> {
+pub async fn read_key_file(path: &str) -> Result<String, String> {
     let file = tokio::fs::File::open(path)
         .await
         .map_err(|_| "Cannot open the selected key file")?;
@@ -290,7 +297,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(windows)]
     async fn isolated_ssh_and_sftp_roundtrip() {
         use std::io::{BufRead, BufReader};
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -332,6 +338,7 @@ mod tests {
             favorite: false,
         };
         let mut store = Store::open(dir.path().join("vault.dpapi")).unwrap();
+        store.initialize("synthetic-vault-password", false).unwrap();
         store.vault.known_hosts.insert(
             host.endpoint(),
             fixture["fingerprint"].as_str().unwrap().into(),
@@ -340,6 +347,8 @@ mod tests {
         let secret = Secret {
             password: "synthetic-only".into(),
             passphrase: String::new(),
+            private_key: String::new(),
+            certificate: String::new(),
         };
         let (session, mut terminal, _rx) = open(host.clone(), secret, store.clone()).await.unwrap();
         async fn receive_until(channel: &mut russh::Channel<client::Msg>, marker: &str) {
@@ -399,6 +408,8 @@ mod tests {
         let bad = Secret {
             password: "wrong".into(),
             passphrase: String::new(),
+            private_key: String::new(),
+            certificate: String::new(),
         };
         assert!(open(host.clone(), bad, store.clone()).await.is_err());
         let mut key_host = host.clone();
@@ -407,6 +418,8 @@ mod tests {
         let credentials = Secret {
             password: String::new(),
             passphrase: "fixture-passphrase".into(),
+            private_key: String::new(),
+            certificate: String::new(),
         };
         let (key_session, _, _) = open(key_host.clone(), credentials, store.clone())
             .await
@@ -425,6 +438,8 @@ mod tests {
         let wrong_phrase = Secret {
             password: String::new(),
             passphrase: "wrong".into(),
+            private_key: String::new(),
+            certificate: String::new(),
         };
         assert!(open(key_host, wrong_phrase, store.clone()).await.is_err());
         store
@@ -436,6 +451,8 @@ mod tests {
         let valid = Secret {
             password: "synthetic-only".into(),
             passphrase: String::new(),
+            private_key: String::new(),
+            certificate: String::new(),
         };
         assert!(open(host, valid, store).await.is_err());
         session
