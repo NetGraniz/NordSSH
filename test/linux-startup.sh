@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+  exec dbus-run-session -- bash "$0" "$@"
+fi
 APPIMAGE_EXTRACT_AND_RUN=1 "$1" > /tmp/nordssh-startup.log 2>&1 &
 app_pid=$!
 trap 'kill "$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true' EXIT

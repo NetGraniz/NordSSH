@@ -44,8 +44,11 @@ const path = require("node:path");
         `<script type="module">
       import {mockIPC} from '/node_modules/@tauri-apps/api/mocks.js';
       const state={hosts:[],settings:{theme:'nord',fontSize:14,checkUpdates:false},snippets:[],version:'UI test'};
+      const vault={initialized:!window.__NEW_TEST_VAULT,unlocked:!window.__NEW_TEST_VAULT,migration:false,path:'fixture.nordvault',portable:true};
       mockIPC((command,args)=>{
-        if(command==='vault_status')return {initialized:true,unlocked:true,migration:false,path:'fixture.nordvault',portable:true};
+        if(command==='vault_status')return structuredClone(vault);
+        if(command==='vault_lock'){vault.unlocked=false;return;}
+        if(command==='vault_unlock'){if(args.password!=='synthetic-vault-password')throw new Error('Wrong password');vault.initialized=true;vault.unlocked=true;return null;}
         if(command==='snapshot')return structuredClone(state);
         if(command==='save_host'){state.hosts.push(args.host);return;}
         if(command==='save_settings'){state.settings=args.settings;return;}
@@ -99,6 +102,36 @@ const path = require("node:path");
     await page.locator(".snippet").waitFor();
     await page.locator("#updates").click();
     await page.getByText("Обновлений нет", { exact: true }).waitFor();
+    await page.locator("[data-page=settings]").click();
+    await page.locator("#lock-vault").click();
+    await page.locator("#vault-dialog[open]").waitFor();
+    await page.keyboard.press("Escape");
+    assert.equal(
+      await page.locator("#vault-dialog").evaluate((d) => d.open),
+      true,
+    );
+    await page.locator("#vault-password").fill("wrong-password");
+    await page.locator("#vault-submit").click();
+    await page.getByText("Error: Wrong password", { exact: true }).waitFor();
+    await page.locator("#vault-password").fill("synthetic-vault-password");
+    await page.locator("#vault-submit").click();
+    await page.locator("#vault-dialog").waitFor({ state: "hidden" });
+    await page.addInitScript(() => {
+      window.__NEW_TEST_VAULT = true;
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator("#vault-dialog[open]").waitFor();
+    await page.locator("#vault-password").fill("synthetic-vault-password");
+    await page.locator("#vault-confirm").fill("mismatch");
+    await page.locator("#vault-submit").click();
+    await page
+      .getByText("Пароли должны совпадать и содержать минимум 12 символов.", {
+        exact: true,
+      })
+      .waitFor();
+    await page.locator("#vault-confirm").fill("synthetic-vault-password");
+    await page.locator("#vault-submit").click();
+    await page.locator("#vault-dialog").waitFor({ state: "hidden" });
     assert.deepEqual(errors, []);
     console.log(
       "PASS: empty state, host form/auth fields, host rendering/search, theme, snippets, update check; no browser errors. IPC mocked.",

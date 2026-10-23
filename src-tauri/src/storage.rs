@@ -130,10 +130,29 @@ impl Store {
         if self.envelope.is_some() || self.path.try_exists().map_err(|_| "Cannot inspect vault")? {
             return Err("Vault already exists; no data changed".into());
         }
-        let (e, key) = Envelope::create(&self.vault, password)?;
+        let mut candidate = self.vault.clone();
+        if self.migration {
+            for host in &candidate.hosts {
+                if host.auth != "password" {
+                    let secret = candidate.secrets.entry(host.id.clone()).or_default();
+                    if secret.private_key.is_empty() {
+                        secret.private_key=String::from_utf8(read_limited(Path::new(&host.key_path),1024*1024)?).map_err(|_|"Legacy key must be a text OpenSSH/PEM file; original vault preserved")?;
+                    }
+                    if host.auth == "certificate" && secret.certificate.is_empty() {
+                        secret.certificate = String::from_utf8(read_limited(
+                            Path::new(&host.certificate_path),
+                            1024 * 1024,
+                        )?)
+                        .map_err(|_| "Legacy certificate is not UTF-8; original vault preserved")?;
+                    }
+                }
+            }
+        }
+        let (e, key) = Envelope::create(&candidate, password)?;
         atomic_write(&self.path, &encode(&e)?)?;
         self.envelope = Some(e);
         self.key = Some(key);
+        self.vault = candidate;
         self.migration = false;
         Ok(self.remember(remember).err())
     }

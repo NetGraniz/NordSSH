@@ -149,6 +149,14 @@ impl Envelope {
 mod tests {
     use super::*;
     #[test]
+    #[cfg(target_os = "linux")]
+    fn glib_string_iteration_security_backport() {
+        use glib::variant::ToVariant;
+        let variant = vec!["one", "two", "three"].to_variant();
+        let strings = variant.array_iter_str().unwrap().collect::<Vec<_>>();
+        assert_eq!(strings, vec!["one", "two", "three"]);
+    }
+    #[test]
     fn portable_roundtrip_wrong_password_and_tamper() {
         let (mut e, k) = Envelope::create(&Vault::default(), "fixture-only-password").unwrap();
         assert!(e.unlock("incorrect password").is_err());

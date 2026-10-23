@@ -29,4 +29,6 @@ password. The original is left unchanged. Old key-file references are embedded
 when exporting; missing key files cause an export error, not an incomplete backup.
 
 This is a beta, not an audited password manager. Keep independent backups.
+RSA keys are disabled in this beta after a dependency advisory. Use Ed25519/ECDSA
+keys and compatible server host keys. Password authentication remains supported.
 https://github.com/NetGraniz/NordSSH

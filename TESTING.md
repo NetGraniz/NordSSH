@@ -1,5 +1,28 @@
 # Development checks
 
+## 0.1.0-beta.1 — portable vault, 2026-10-23
+
+Local checks passed portable encryption/decryption, wrong-password rejection,
+authenticated header/wrapped-key tampering, encrypted export/import preserving
+credentials/settings/trusted keys, locked-write refusal, corruption and stale-file
+preservation, Windows device unlock, and legacy DPAPI migration preserving the
+original bytes. The generated Windows interchange fixture uses only synthetic
+data and the public password `synthetic-only-vault-password`.
+
+The browser IPC-mock suite additionally checks first-vault setup, password mismatch,
+wrong-password retry, non-dismissable lock and unlock. This remains a mocked UI
+test, not proof of all native dialogs or clipboard behavior. Linux and Windows
+release checks and reverse interchange verification are pending at this record's
+initial commit; no successful result is assumed before the jobs complete.
+
+Dependency review found the GTK GLib iterator issue and RSA timing advisory.
+The former carries the documented upstream two-line backport; RSA is disabled.
+Remaining informational maintenance advisories are listed in SECURITY.md.
+
+The first release-build run was cancelled after these review findings. Its
+artifacts are not the release. A follow-up builds the corrected source and adds
+a D-Bus session to the isolated Linux window startup smoke check.
+
 ## 0.1.0-dev.1 — Windows, 2026-10-23
 
 Environment: Rust 1.99.1, Node.js 24.19.0, Visual Studio Build Tools 2022 with

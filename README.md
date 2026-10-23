@@ -5,7 +5,8 @@ service or subscription. The first portable beta is `0.1.0-beta.1`.
 
 ## Connections and terminal
 
-- Passwords, private keys and OpenSSH user certificates.
+- Passwords, Ed25519/ECDSA private keys and compatible OpenSSH user certificates.
+  RSA is disabled in this beta pending a safe backend; see SECURITY.md.
 - Terminal tabs, resizing, right-click paste, multiline/control-character paste
   confirmation, two themes and adjustable font size.
 - Hosts organized by vault labels, favorites and search; saved command snippets.

@@ -12,7 +12,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm test
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

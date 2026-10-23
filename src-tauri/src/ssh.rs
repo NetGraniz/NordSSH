@@ -157,15 +157,10 @@ pub async fn open(
                     .authenticate_openssh_cert(&host.username, Arc::new(key), cert)
                     .await
             } else {
-                let hash = handle
-                    .best_supported_rsa_hash()
-                    .await
-                    .map_err(|_| "Cannot negotiate RSA signature")?
-                    .flatten();
                 handle
                     .authenticate_publickey(
                         &host.username,
-                        PrivateKeyWithHashAlg::new(Arc::new(key), hash),
+                        PrivateKeyWithHashAlg::new(Arc::new(key), None),
                     )
                     .await
             };
