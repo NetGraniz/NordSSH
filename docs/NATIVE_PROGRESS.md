@@ -304,3 +304,10 @@ and untouched guard bytes. The existing upstream regression remains enabled.
 The manual cross-platform workflow now applies this patch before compilation.
 Linux validation of the fix is pending a new workflow run; no terminal or
 application gate is declared complete by the source change alone.
+
+The first local compile caught obsolete Zig array-repeat syntax in the new
+test; replaced it with the pinned compiler's `@splat` syntax before continuing
+validation. The first dispatched run was cancelled rather than left to consume
+runner time on that known compile error. Filtered Windows `RealPath` tests now
+pass (69 passes, two Linux-only skips across overlapping executables). These
+Windows results do not execute the Linux-specific regression.

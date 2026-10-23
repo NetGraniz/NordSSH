@@ -24,8 +24,6 @@ diff --git a/src/lib/tinyio/test.zig b/src/lib/tinyio/test.zig
 --- a/src/lib/tinyio/test.zig
 +++ b/src/lib/tinyio/test.zig
 @@ -656,6 +656,45 @@
- }
- 
 +test "fileRealPath rejects truncation" {
 +    if (builtin.target.os.tag != .linux) return error.SkipZigTest;
 +    const tio: TinyIo = .init;
@@ -40,7 +38,7 @@ diff --git a/src/lib/tinyio/test.zig b/src/lib/tinyio/test.zig
 +    var full: [std.Io.Dir.max_path_bytes]u8 = undefined;
 +    const n = try file.realPath(test_io, &full);
 +    try testing.expect(n > 8);
-+    var guarded = [_]u8{0xa5} ** std.Io.Dir.max_path_bytes;
++    var guarded: [std.Io.Dir.max_path_bytes]u8 = @splat(0xa5);
 +    try testing.expectError(error.NameTooLong, file.realPath(test_io, guarded[0..0]));
 +    try testing.expectError(error.NameTooLong, file.realPath(test_io, guarded[0..8]));
 +    try testing.expectError(error.NameTooLong, file.realPath(test_io, guarded[0 .. n - 1]));
