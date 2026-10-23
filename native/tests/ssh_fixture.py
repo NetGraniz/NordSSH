@@ -32,6 +32,7 @@ async def main():
         process.stdout.write(b"fixture-ready\r\n")
         if terminal_gate:
             process.stdout.write(b"\x1b[?1049h\x1b[2J\x1b[Halternate-screen\x1b[?1049l")
+            process.stdout.write(b"\x1b[?1000h\x1b[?1006h")
         try:
             while True:
                 try:
@@ -73,6 +74,8 @@ async def main():
             if len(attempts) - before != expected_auth:
                 raise AssertionError(f"Unexpected authentication before approval: {mode}")
         expected = "once-привет" if terminal_gate else "once-привет\n"
+        if terminal_gate:
+            expected += "\x1b[<0;1;1M\x1b[<0;1;1m\x1b[<64;1;1M"
         if bytes(received) != expected.encode("utf-8"):
             raise AssertionError("SSH input bytes were duplicated or changed")
         if not dimensions or dimensions[0] != (80, 24):

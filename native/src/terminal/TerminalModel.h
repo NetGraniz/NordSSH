@@ -6,6 +6,8 @@
 #include <memory>
 
 class QKeyEvent;
+class QMouseEvent;
+class QWheelEvent;
 
 namespace nordssh {
 struct TerminalCell {
@@ -41,6 +43,9 @@ public:
     void scrollToBottom();
     [[nodiscard]] TerminalFrame frame();
     [[nodiscard]] QByteArray key(const QKeyEvent& event);
+    [[nodiscard]] QByteArray mouse(const QMouseEvent& event);
+    // One protocol event per detent, capped at 32 per call. No local scrolling.
+    [[nodiscard]] QByteArray wheel(const QWheelEvent& event, int steps);
     // Refusal writes nothing. Confirmation must apply to this captured text,
     // not a second clipboard read after a nested dialog has run.
     [[nodiscard]] bool paste(const QByteArray& text, bool confirmed = false);

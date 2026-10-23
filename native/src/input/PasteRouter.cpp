@@ -54,6 +54,12 @@ bool PasteRouter::eventFilter(QObject* target, QEvent* event) {
         event->type() == QEvent::MouseButtonDblClick) {
         const auto& mouse = *static_cast<QMouseEvent*>(event);
         if (mouse.button() != Qt::RightButton) return false;
+        if (event->type() == QEvent::MouseButtonRelease) {
+            if (!consumedRight_) return false;
+            consumedRight_ = false; event->accept(); return true;
+        }
+        if (!rightClickPaste_) return false;
+        consumedRight_ = true;
         event->accept();
         if (event->type() == QEvent::MouseButtonPress) requestOnce();
         return true;

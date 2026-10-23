@@ -315,3 +315,37 @@ Windows results do not execute the Linux-specific regression.
 The Windows runner then exposed CRLF conversion of the patch file itself,
 before compilation. Added an LF checkout attribute for `.patch` files; patch
 application continues to use strict whitespace/error checks on both platforms.
+
+## Eighth checkpoint: native mouse reporting
+
+Added the pinned engine's mouse encoder to the Qt adapter, not a handwritten
+escape-sequence generator. Terminal output updates its tracking/format mode;
+geometry follows the same logical cells as the renderer. Added press/release,
+button drag, any-mode hover and bounded vertical wheel batches. Remote modes no
+longer silently discard wheel input. Shift remains a local-history override.
+Default right-click paste is unchanged and still uses the single paste router;
+a native widget preference can instead route right-click to the remote program.
+
+Gesture ownership survives modifier changes; paste/local drags do not become
+remote drags halfway through. Focus loss releases tracked remote buttons once.
+Pointer values are finite/bounded before the C ABI, wheel batches cap at 32
+events and motion within the same cell deduplicates through the engine. Tests
+caught that the upstream state-sync helper resets deduplication on every call;
+it now runs when terminal output changes, not for each pointer event.
+
+Checked the pinned C headers/example/implementation and official Qt mouse/wheel
+event semantics. The new synthetic offscreen test covers SGR, legacy encoding,
+pixel/cell geometry, resize, tracking/modifiers, routing and bounds. The real
+loopback SSH fixture independently verifies exact click/release/wheel bytes after
+one UTF-8 paste. The combined Windows Debug CTest run passed **9/9 in 11.89 s**
+before adding the final gesture/lifetime regressions; final rerun follows below.
+This uses the development SDK, not a packaged app or real fullscreen TUI.
+
+Horizontal wheel, selection/search, cursor behavior, preedit, desktop RU/EN/DPI,
+full application connections, persisted trust/vaults, SFTP and installers remain
+open. No native release or user test request was made.
+
+Final Windows combined rerun after outside-press, local-drag and callback/tab
+destruction regressions passed **9/9 in 11.82 s**. History, mouse and real SSH
+terminal tests each also passed five consecutive runs (repetition, not new
+coverage). Linux full upstream/SDK/ABI run 40037749689 is still pending.

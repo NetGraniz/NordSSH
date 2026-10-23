@@ -14,6 +14,7 @@ namespace nordssh {
 class PasteRouter final : public QObject {
 public:
     PasteRouter(QObject* terminalWidget, std::function<void()> requestPaste);
+    void setRightClickPaste(bool enabled) { rightClickPaste_ = enabled; }
 protected:
     bool eventFilter(QObject* target, QEvent* event) override;
 private:
@@ -21,5 +22,6 @@ private:
     void requestOnce();
     std::function<void()> requestPaste_;
     std::shared_ptr<bool> busy_ = std::make_shared<bool>(false);
+    bool rightClickPaste_ = true, consumedRight_ = false;
 };
 } // namespace nordssh

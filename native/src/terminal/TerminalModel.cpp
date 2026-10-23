@@ -1,9 +1,12 @@
 #include <ghostty/vt.h>
 #include "TerminalModel.h"
 #include <QKeyEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
 #include <QThread>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
@@ -61,6 +64,22 @@ GhosttyKey physicalKey(const QKeyEvent& event) {
     default: return GHOSTTY_KEY_UNIDENTIFIED;
     }
 }
+GhosttyMods mouseModifiers(Qt::KeyboardModifiers value) {
+    GhosttyMods result = 0;
+    if (value.testFlag(Qt::ShiftModifier)) result |= GHOSTTY_MODS_SHIFT;
+    if (value.testFlag(Qt::ControlModifier)) result |= GHOSTTY_MODS_CTRL;
+    if (value.testFlag(Qt::AltModifier)) result |= GHOSTTY_MODS_ALT;
+    if (value.testFlag(Qt::MetaModifier)) result |= GHOSTTY_MODS_SUPER;
+    return result;
+}
+GhosttyMouseButton mouseButton(Qt::MouseButton value) {
+    switch (value) {
+    case Qt::LeftButton: return GHOSTTY_MOUSE_BUTTON_LEFT;
+    case Qt::MiddleButton: return GHOSTTY_MOUSE_BUTTON_MIDDLE;
+    case Qt::RightButton: return GHOSTTY_MOUSE_BUTTON_RIGHT;
+    default: return GHOSTTY_MOUSE_BUTTON_UNKNOWN;
+    }
+}
 }
 
 struct TerminalModel::Impl {
@@ -70,11 +89,39 @@ struct TerminalModel::Impl {
     GhosttyRenderStateRowCells cells{};
     GhosttyKeyEncoder encoder{};
     GhosttyKeyEvent event{};
+    GhosttyMouseEncoder mouseEncoder{};
+    GhosttyMouseEvent mouseEvent{};
+    int columns = 80, rowCount = 24, cellWidth = 8, cellHeight = 16;
     QThread* owner = QThread::currentThread();
     QByteArray replies;
     bool overflow = false;
     void checkOwner() const {
         if (owner != QThread::currentThread()) throw std::logic_error("Terminal thread ownership violation");
+    }
+    QByteArray encodeMouse(GhosttyMouseAction action, GhosttyMouseButton button,
+                           QPointF position, Qt::KeyboardModifiers mods, bool pressed) {
+        if (!std::isfinite(position.x()) || !std::isfinite(position.y()) ||
+            std::abs(position.x()) > 1000000 || std::abs(position.y()) > 1000000)
+            throw std::invalid_argument("Mouse position outside limits");
+        ghostty_mouse_encoder_setopt(mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed);
+        ghostty_mouse_event_set_action(mouseEvent, action);
+        if (button == GHOSTTY_MOUSE_BUTTON_UNKNOWN) ghostty_mouse_event_clear_button(mouseEvent);
+        else ghostty_mouse_event_set_button(mouseEvent, button);
+        ghostty_mouse_event_set_mods(mouseEvent, mouseModifiers(mods));
+        ghostty_mouse_event_set_position(mouseEvent,
+            {static_cast<float>(position.x()), static_cast<float>(position.y())});
+        std::array<char,128> bytes{};
+        std::size_t length = 0;
+        checked(ghostty_mouse_encoder_encode(mouseEncoder, mouseEvent, bytes.data(), bytes.size(), &length));
+        return {bytes.data(), static_cast<qsizetype>(length)};
+    }
+    void mouseGeometry() {
+        auto size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+        size.screen_width = static_cast<std::uint32_t>(columns * cellWidth);
+        size.screen_height = static_cast<std::uint32_t>(rowCount * cellHeight);
+        size.cell_width = static_cast<std::uint32_t>(cellWidth);
+        size.cell_height = static_cast<std::uint32_t>(cellHeight);
+        ghostty_mouse_encoder_setopt(mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
     }
     // No exceptions may cross this C ABI boundary. Overflow poisons the adapter
     // instead of dropping protocol bytes and continuing a corrupted session.
@@ -88,6 +135,8 @@ struct TerminalModel::Impl {
         catch (...) { self.overflow = true; }
     }
     ~Impl() {
+        ghostty_mouse_event_free(mouseEvent);
+        ghostty_mouse_encoder_free(mouseEncoder);
         ghostty_key_event_free(event);
         ghostty_key_encoder_free(encoder);
         ghostty_render_state_row_cells_free(cells);
@@ -125,6 +174,11 @@ TerminalModel::TerminalModel(int columns, int rows) : impl_(std::make_unique<Imp
     checked(ghostty_render_state_row_cells_new(nullptr, &state.cells));
     checked(ghostty_key_encoder_new(nullptr, &state.encoder));
     checked(ghostty_key_event_new(nullptr, &state.event));
+    checked(ghostty_mouse_encoder_new(nullptr, &state.mouseEncoder));
+    checked(ghostty_mouse_event_new(nullptr, &state.mouseEvent));
+    const bool trackCell = true;
+    ghostty_mouse_encoder_setopt(state.mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL, &trackCell);
+    state.columns = columns; state.rowCount = rows; state.mouseGeometry();
 }
 TerminalModel::~TerminalModel() = default;
 
@@ -133,6 +187,9 @@ void TerminalModel::feed(const QByteArray& bytes) {
     if (bytes.size() > MaximumBatch) throw std::invalid_argument("Terminal batch exceeds limit");
     ghostty_terminal_vt_write(state.terminal, reinterpret_cast<const std::uint8_t*>(bytes.constData()),
         static_cast<std::size_t>(bytes.size()));
+    // This upstream helper resets motion deduplication. Sync on output/mode
+    // changes, not on every pointer event in an otherwise unchanged terminal.
+    ghostty_mouse_encoder_setopt_from_terminal(state.mouseEncoder, state.terminal);
     bool failed = false;
     checked(ghostty_terminal_get(state.terminal, GHOSTTY_TERMINAL_DATA_VT_PROCESSING_ERROR, &failed));
     if (failed || state.overflow) throw std::runtime_error("Terminal parser or reply limit failure");
@@ -143,6 +200,8 @@ void TerminalModel::resize(int columns, int rows, int cellWidth, int cellHeight)
         throw std::invalid_argument("Terminal cell size outside limits");
     checked(ghostty_terminal_resize(impl_->terminal, static_cast<std::uint16_t>(columns),
         static_cast<std::uint16_t>(rows), static_cast<std::uint32_t>(cellWidth), static_cast<std::uint32_t>(cellHeight)));
+    impl_->columns = columns; impl_->rowCount = rows;
+    impl_->cellWidth = cellWidth; impl_->cellHeight = cellHeight; impl_->mouseGeometry();
 }
 void TerminalModel::scroll(int lines) {
     impl_->checkOwner();
@@ -257,6 +316,33 @@ QByteArray TerminalModel::key(const QKeyEvent& key) {
     std::size_t length = 0;
     checked(ghostty_key_encoder_encode(state.encoder, state.event, output.data(), output.size(), &length));
     return {output.data(), static_cast<qsizetype>(length)};
+}
+QByteArray TerminalModel::mouse(const QMouseEvent& event) {
+    auto& state = *impl_; state.checkOwner();
+    const bool moving = event.type() == QEvent::MouseMove;
+    if (!moving && event.type() != QEvent::MouseButtonPress &&
+        event.type() != QEvent::MouseButtonDblClick && event.type() != QEvent::MouseButtonRelease)
+        throw std::invalid_argument("Unsupported mouse action");
+    auto button = event.button();
+    if (moving) {
+        button = Qt::NoButton;
+        for (const auto candidate : {Qt::LeftButton, Qt::MiddleButton, Qt::RightButton})
+            if (event.buttons().testFlag(candidate)) { button = candidate; break; }
+    }
+    if (button != Qt::NoButton && mouseButton(button) == GHOSTTY_MOUSE_BUTTON_UNKNOWN) return {};
+    const auto action = moving ? GHOSTTY_MOUSE_ACTION_MOTION :
+        (event.type() == QEvent::MouseButtonRelease ? GHOSTTY_MOUSE_ACTION_RELEASE : GHOSTTY_MOUSE_ACTION_PRESS);
+    return state.encodeMouse(action, mouseButton(button), event.position(), event.modifiers(), event.buttons() != Qt::NoButton);
+}
+QByteArray TerminalModel::wheel(const QWheelEvent& event, int steps) {
+    auto& state = *impl_; state.checkOwner();
+    if (steps < -32 || steps > 32) throw std::invalid_argument("Mouse wheel batch exceeds limit");
+    QByteArray bytes;
+    for (int i = 0; i < std::abs(steps); ++i)
+        bytes += state.encodeMouse(GHOSTTY_MOUSE_ACTION_PRESS,
+            steps > 0 ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE,
+            event.position(), event.modifiers(), event.buttons() != Qt::NoButton);
+    return bytes;
 }
 bool TerminalModel::paste(const QByteArray& text, bool confirmed) {
     impl_->checkOwner();

@@ -8,6 +8,7 @@
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPointer>
 #include <QResizeEvent>
@@ -31,6 +32,7 @@ TerminalWidget::TerminalWidget(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_InputMethodEnabled);
     setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
     setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     setAccessibleName(tr("SSH terminal"));
     updateMetrics();
@@ -47,12 +49,13 @@ TerminalWidget::TerminalWidget(QWidget* parent) : QWidget(parent) {
         delete dialog;
         return result == QMessageBox::Yes;
     };
-    new PasteRouter(this, [this] { paste(); });
+    pasteRouter_ = new PasteRouter(this, [this] { paste(); });
     frame_ = model_.frame();
 }
 void TerminalWidget::setSend(std::function<void(const QByteArray&)> send) { send_ = std::move(send); }
 void TerminalWidget::setResize(std::function<void(int, int)> resize) { resize_ = std::move(resize); }
 void TerminalWidget::setFailure(std::function<void()> failure) { failure_ = std::move(failure); }
+void TerminalWidget::setRightClickPaste(bool enabled) { pasteRouter_->setRightClickPaste(enabled); }
 void TerminalWidget::setPasteSource(std::function<QString()> read, std::function<bool()> confirm) {
     readPaste_ = std::move(read); confirmPaste_ = std::move(confirm);
 }
@@ -188,12 +191,22 @@ void TerminalWidget::followOutput() {
 void TerminalWidget::wheelEvent(QWheelEvent* event) {
     event->accept();
     if (failed_) return;
-    // Remote mouse reporting is a separate pending gate. Do not reinterpret
-    // a fullscreen program's mouse events as local history unless Shift is held.
-    if (frame_.mouseTracking && event->modifiers() != Qt::ShiftModifier) {
-        wheelAngle_ = wheelPixels_ = 0; return;
-    }
+    QPointer<TerminalWidget> self(this);
     try {
+        const bool remote = frame_.mouseTracking && !event->modifiers().testFlag(Qt::ShiftModifier);
+        if (remote != wheelWasRemote_) { remoteWheel_ = wheelAngle_ = wheelPixels_ = 0; wheelWasRemote_ = remote; }
+        if (remote) {
+            const bool pixels = !event->pixelDelta().isNull() && QGuiApplication::platformName() != "xcb";
+            if (pixels != remoteWheelPixels_) { remoteWheel_ = 0; remoteWheelPixels_ = pixels; }
+            const int unit = pixels ? cellHeight_ : 120;
+            remoteWheel_ = std::clamp<qint64>(remoteWheel_ + (pixels ? event->pixelDelta().y() : event->angleDelta().y()), -32768, 32768);
+            const int steps = static_cast<int>(std::clamp<qint64>(remoteWheel_ / unit, -32, 32));
+            remoteWheel_ %= unit; // Excess events are bounded, not queued without limit.
+            const auto bytes = model_.wheel(*event, steps);
+            const auto send = send_;
+            if (!bytes.isEmpty() && send) { followOutput(); send(bytes); }
+            return;
+        }
         qint64 lines = 0;
         if (!event->pixelDelta().isNull() && QGuiApplication::platformName() != "xcb") {
             wheelAngle_ = 0;
@@ -208,12 +221,53 @@ void TerminalWidget::wheelEvent(QWheelEvent* event) {
         // inverted() is informative, not a reason to invert them a second time.
         if (lines == 0) return;
         model_.scroll(static_cast<int>(std::clamp<qint64>(lines,-10000,10000))); frame_ = model_.frame(); update();
-    } catch (...) { fail(); }
+    } catch (...) { if (self) self->fail(); }
 }
+void TerminalWidget::mouseInput(QMouseEvent* event) {
+    event->accept();
+    if (failed_) return;
+    QPointer<TerminalWidget> self(this);
+    try {
+        lastMouse_ = event->position();
+        const bool release = event->type() == QEvent::MouseButtonRelease;
+        const bool motion = event->type() == QEvent::MouseMove;
+        if (!motion && event->button() != Qt::LeftButton && event->button() != Qt::MiddleButton && event->button() != Qt::RightButton) return;
+        if (release) {
+            if (!remoteButtons_.testFlag(event->button())) return;
+            remoteButtons_ &= ~event->button();
+        } else if (!motion) {
+            if (!frame_.mouseTracking || event->modifiers().testFlag(Qt::ShiftModifier)) return;
+            if (event->position().x() < 0 || event->position().y() < 0 ||
+                event->position().x() >= frame_.columns * cellWidth_ ||
+                event->position().y() >= frame_.rows * cellHeight_) return;
+            remoteButtons_ |= event->button();
+        } else if (!frame_.mouseTracking ||
+            (remoteButtons_ == Qt::NoButton && (event->buttons() != Qt::NoButton || event->modifiers().testFlag(Qt::ShiftModifier)))) return;
+        // Local Shift gestures and paste-button drags never acquire remote buttons.
+        QMouseEvent filtered(event->type(), event->position(), event->globalPosition(),
+            event->button(), remoteButtons_, event->modifiers());
+        const auto bytes = model_.mouse(filtered);
+        const auto send = send_;
+        if (!bytes.isEmpty() && send) { followOutput(); send(bytes); }
+    } catch (...) { if (self) self->fail(); }
+}
+void TerminalWidget::mousePressEvent(QMouseEvent* event) { mouseInput(event); }
+void TerminalWidget::mouseDoubleClickEvent(QMouseEvent* event) { mouseInput(event); }
+void TerminalWidget::mouseReleaseEvent(QMouseEvent* event) { mouseInput(event); }
+void TerminalWidget::mouseMoveEvent(QMouseEvent* event) { mouseInput(event); }
 void TerminalWidget::focusOutEvent(QFocusEvent* event) {
     // Keep local-release suppression if focus changes while a navigation key
     // is held. A subsequent nonlocal press explicitly replaces that state.
-    wheelAngle_ = wheelPixels_ = 0;
+    wheelAngle_ = wheelPixels_ = remoteWheel_ = 0;
+    // Release tracked remote buttons on focus loss; never invent a press.
+    QPointer<TerminalWidget> self(this);
+    for (const auto button : {Qt::LeftButton, Qt::MiddleButton, Qt::RightButton}) {
+        if (!remoteButtons_.testFlag(button)) continue;
+        QMouseEvent release(QEvent::MouseButtonRelease, lastMouse_, lastMouse_, button,
+            remoteButtons_ & ~button, Qt::NoModifier);
+        mouseInput(&release);
+        if (!self) return;
+    }
     QWidget::focusOutEvent(event);
 }
 void TerminalWidget::paste() {

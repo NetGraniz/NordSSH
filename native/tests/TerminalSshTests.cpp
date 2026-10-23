@@ -4,6 +4,8 @@
 #include "ssh/Session.h"
 #include <QApplication>
 #include <QKeyEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
 #include <QTimer>
 #include <atomic>
 #include <chrono>
@@ -112,6 +114,13 @@ int main(int argc, char** argv) {
                 widget.resize(initial.width() / 80 * 100, initial.height() / 24 * 40);
                 QKeyEvent paste(QEvent::KeyPress, Qt::Key_V, Qt::ControlModifier);
                 QApplication::sendEvent(&widget, &paste);
+                for (const auto type : {QEvent::MouseButtonPress,QEvent::MouseButtonRelease}) {
+                    QMouseEvent click(type,{5,5},{5,5},Qt::LeftButton,
+                        type==QEvent::MouseButtonPress?Qt::LeftButton:Qt::NoButton,Qt::NoModifier);
+                    QApplication::sendEvent(&widget,&click);
+                }
+                QWheelEvent wheel({5,5},{5,5},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+                QApplication::sendEvent(&widget,&wheel);
             }
             if (visible.contains(QString::fromUtf8("echo:once-привет"))) {
                 success = true; app.exit(EXIT_SUCCESS);
@@ -121,7 +130,7 @@ int main(int argc, char** argv) {
         const int result = app.exec();
         worker.request_stop(); worker.join();
         require(success && result == EXIT_SUCCESS && !mailbox.failed, "Real SSH/render/paste gate failed");
-        std::cout << "Qt terminal real loopback SSH UTF8 single-paste/resize passed\n";
+        std::cout << "Qt terminal real loopback SSH UTF8 single-paste/mouse/resize passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return EXIT_FAILURE; }
 }

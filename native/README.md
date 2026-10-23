@@ -27,7 +27,8 @@ Current product modules:
   terminal-state-aware key encoding and a single paste route. No text widget,
   HTML, URL launch or remote clipboard hooks. Its SSH test owns a real loopback
   connection in a test-only worker; it does not implement the product connection
-  manager. Selection/search, mouse reporting, preedit, fullscreen programs and
+  manager. Bounded mouse press/release/drag/hover/wheel encoding follows the
+  remote application's tracking protocol. Selection/search, preedit, fullscreen programs and
   desktop clipboard/layout gates remain open.
 
 Build the dependency-free core with CMake and a C++20 compiler:
@@ -63,13 +64,20 @@ pinned upstream/SDK/ABI checks on Windows and Linux without publishing a release
 
 `NORDSSH_BUILD_TERMINAL=ON` builds the raster adapter and `terminal_widget` test
 using the same SDK prefix and pinned Qt. When `NORDSSH_BUILD_SSH=ON` is also set,
-`terminal_ssh` checks real SSH output, one UTF-8 paste and resize using the isolated
+`terminal_ssh` checks real SSH output, one UTF-8 paste, exact mouse bytes and resize using the isolated
 fixture. Tests inject a synthetic clipboard source and run Qt offscreen; they do
 not read/change the user's clipboard, layout, vault or saved connections.
 
 `terminal_history` additionally checks primary-history navigation, alternate-screen
 isolation, retaining the viewed history during new output, returning to output on
 input, partial wheel deltas, local navigation key releases under Kitty mode and
-bounded extreme deltas. It uses synthetic offscreen events. Remote mouse reporting
-is still pending; with a remote mouse mode active, only Shift+wheel explicitly
-requests local history.
+bounded extreme deltas. It uses synthetic offscreen events. With a remote mouse
+mode active, Shift+wheel explicitly requests local history.
+
+`terminal_mouse` checks SGR/legacy encoding, pixel/cell coordinates, resize,
+motion deduplication, tracking modes, modifiers, bounded wheel batches and
+focus-loss releases. Right-click still pastes once by default; the widget's
+`setRightClickPaste(false)` lets a future native setting send it to a TUI instead.
+Shift gestures stay local even if Shift is released before the mouse button.
+Actual desktop pointer/DPI behavior, horizontal wheel, selection and real
+vim/tmux acceptance remain pending.

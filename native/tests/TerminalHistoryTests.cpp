@@ -77,6 +77,7 @@ int main(int argc,char** argv) {
         key(widget,Qt::Key_End,Qt::ShiftModifier);key(widget,Qt::Key_End,Qt::NoModifier,QEvent::KeyRelease);
         widget.feed("\x1b[?1000h");
         wheel(widget,120);require(widget.snapshot().followingOutput,"Remote mouse mode is not reinterpreted as history");
+        require(!sent.isEmpty(),"Remote mouse wheel delivers protocol bytes");sent.clear();
         wheel(widget,120,0,false,Qt::ShiftModifier);require(!widget.snapshot().followingOutput,"Shift explicitly overrides remote mouse mode for local history");
         widget.feed("\x1b[?1000l");
         widget.setPasteSource([]{return QString("captured-paste");},[]{return false;});
@@ -84,7 +85,7 @@ int main(int argc,char** argv) {
         require(widget.snapshot().followingOutput&&sent=="captured-paste","Accepted paste follows output exactly once");
         wheel(widget,std::numeric_limits<int>::min(),std::numeric_limits<int>::max());
         require(failures==0&&widget.isEnabled(),"Extreme wheel deltas remain bounded without disabling terminal");
-        std::cout<<"Native bounded history/wheel/navigation gate passed; remote mouse reporting and desktop wheel are not asserted\n";
+        std::cout<<"Native bounded history/wheel/navigation gate passed; desktop wheel is not asserted\n";
         return EXIT_SUCCESS;
     }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return EXIT_FAILURE;}
 }
