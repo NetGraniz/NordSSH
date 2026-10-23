@@ -20,6 +20,7 @@ struct TerminalFrame {
     QVector<TerminalCell> cells;
     QColor background;
     bool cursorVisible = false;
+    bool followingOutput = true, mouseTracking = false;
     int cursorX = 0, cursorY = 0;
 };
 
@@ -35,6 +36,9 @@ public:
     TerminalModel& operator=(const TerminalModel&) = delete;
     void feed(const QByteArray& bytes);
     void resize(int columns, int rows, int cellWidth, int cellHeight);
+    void scroll(int lines); // Negative is up; one operation is capped at 10,000 lines.
+    void scrollToTop();
+    void scrollToBottom();
     [[nodiscard]] TerminalFrame frame();
     [[nodiscard]] QByteArray key(const QKeyEvent& event);
     // Refusal writes nothing. Confirmation must apply to this captured text,

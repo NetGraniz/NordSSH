@@ -144,6 +144,24 @@ void TerminalModel::resize(int columns, int rows, int cellWidth, int cellHeight)
     checked(ghostty_terminal_resize(impl_->terminal, static_cast<std::uint16_t>(columns),
         static_cast<std::uint16_t>(rows), static_cast<std::uint32_t>(cellWidth), static_cast<std::uint32_t>(cellHeight)));
 }
+void TerminalModel::scroll(int lines) {
+    impl_->checkOwner();
+    if (lines < -10000 || lines > 10000) throw std::invalid_argument("Scroll distance outside limit");
+    GhosttyTerminalScrollViewport request{};
+    request.tag = GHOSTTY_SCROLL_VIEWPORT_DELTA;
+    request.value.delta = lines;
+    ghostty_terminal_scroll_viewport(impl_->terminal, request);
+}
+void TerminalModel::scrollToTop() {
+    impl_->checkOwner();
+    GhosttyTerminalScrollViewport request{}; request.tag = GHOSTTY_SCROLL_VIEWPORT_TOP;
+    ghostty_terminal_scroll_viewport(impl_->terminal, request);
+}
+void TerminalModel::scrollToBottom() {
+    impl_->checkOwner();
+    GhosttyTerminalScrollViewport request{}; request.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
+    ghostty_terminal_scroll_viewport(impl_->terminal, request);
+}
 TerminalFrame TerminalModel::frame() {
     auto& state = *impl_; state.checkOwner();
     checked(ghostty_render_state_update(state.render, state.terminal));
@@ -152,6 +170,8 @@ TerminalFrame TerminalModel::frame() {
     checked(ghostty_render_state_get(state.render, GHOSTTY_RENDER_STATE_DATA_ROWS, &rows));
     dimensions(columns, rows);
     TerminalFrame frame;
+    checked(ghostty_terminal_get(state.terminal, GHOSTTY_TERMINAL_DATA_VIEWPORT_ACTIVE, &frame.followingOutput));
+    checked(ghostty_terminal_get(state.terminal, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &frame.mouseTracking));
     frame.columns = columns; frame.rows = rows;
     frame.cells.resize(columns * rows);
     GhosttyColorRgb foreground{}, background{};

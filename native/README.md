@@ -23,6 +23,7 @@ Current product modules:
   trust policy, keys/2FA, SFTP, jump hosts and forwarding are not implemented yet.
 - `nordssh_terminal`: optional pinned Ghostty adapter and raster `QWidget` with
   cell-based Unicode/truecolor/SGR rendering, alternate-screen state, resize,
+  bounded engine scrollback with wheel/Shift+PageUp/PageDown/Home/End navigation,
   terminal-state-aware key encoding and a single paste route. No text widget,
   HTML, URL launch or remote clipboard hooks. Its SSH test owns a real loopback
   connection in a test-only worker; it does not implement the product connection
@@ -65,3 +66,10 @@ using the same SDK prefix and pinned Qt. When `NORDSSH_BUILD_SSH=ON` is also set
 `terminal_ssh` checks real SSH output, one UTF-8 paste and resize using the isolated
 fixture. Tests inject a synthetic clipboard source and run Qt offscreen; they do
 not read/change the user's clipboard, layout, vault or saved connections.
+
+`terminal_history` additionally checks primary-history navigation, alternate-screen
+isolation, retaining the viewed history during new output, returning to output on
+input, partial wheel deltas, local navigation key releases under Kitty mode and
+bounded extreme deltas. It uses synthetic offscreen events. Remote mouse reporting
+is still pending; with a remote mouse mode active, only Shift+wheel explicitly
+requests local history.

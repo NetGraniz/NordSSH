@@ -52,11 +52,14 @@ jobs:
         working-directory: vt-source
         run: zig build test-lib-vt -Demit-lib-vt -Demit-themes=false -Dtarget=${{ matrix.target }} -Dsimd=false -j1 --summary all
       - name: ReleaseSafe SDK
+        id: vt_build
         if: ${{ always() && steps.sdk.outcome == 'success' }}
         working-directory: vt-source
         run: zig build -Demit-lib-vt -Demit-themes=false -Dtarget=${{ matrix.target }} -Doptimize=ReleaseSafe -Dsimd=false -j1 --summary all
       - name: C++ ABI and bounded engineering baseline
-        if: ${{ success() }}
+        # Preserve upstream failures, but don't lose independent ABI evidence
+        # when an SDK built successfully after an unrelated upstream test failed.
+        if: ${{ !cancelled() && steps.vt_build.outcome == 'success' }}
         run: |
           cmake -S native -B native/build-vt-ci -DCMAKE_BUILD_TYPE=Debug -DNORDSSH_BUILD_VT_GATE=ON -DNORDSSH_GHOSTTY_SDK="${{ github.workspace }}/vt-source/zig-out"
           cmake --build native/build-vt-ci --config Debug --parallel 2

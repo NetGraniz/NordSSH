@@ -23,6 +23,8 @@ protected:
     void resizeEvent(QResizeEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
     void keyReleaseEvent(QKeyEvent*) override;
+    void wheelEvent(QWheelEvent*) override;
+    void focusOutEvent(QFocusEvent*) override;
     void inputMethodEvent(QInputMethodEvent*) override;
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 private:
@@ -31,10 +33,14 @@ private:
     void fail() noexcept;
     void updateMetrics();
     void refreshGeometry();
+    bool historyNavigation(QKeyEvent*);
+    void followOutput();
     TerminalModel model_;
     TerminalFrame frame_;
     int cellWidth_ = 9, cellHeight_ = 18, baseline_ = 14;
     bool failed_ = false;
+    unsigned historyKeys_ = 0;
+    qint64 wheelAngle_ = 0, wheelPixels_ = 0;
     std::function<void(const QByteArray&)> send_;
     std::function<void(int, int)> resize_;
     std::function<void()> failure_;

@@ -232,3 +232,55 @@ output, actual vim/nano/top/less/tmux, full parser/resource corpus and package
 acceptance. The test-only worker is not the cancellable product connection
 manager. Saved trust/authentication dialogs, vault persistence, SFTP, installers
 and signed bundle updates remain work ahead. No native user release was made.
+
+## Sixth checkpoint: bounded native history navigation
+
+After completing the separate NordGuard 0.5.6 release, resumed the clean current
+NordSSH main with a successful pull. Added engine-owned scrollback navigation to
+the raster terminal: wheel/trackpad deltas, Shift+PageUp/PageDown and Shift+Home/End.
+The UI does not build a second unbounded text history. Incoming output preserves
+the user's viewed position; actual terminal input returns to the active area.
+Cancelled paste does not jump the viewport or send bytes.
+
+Partial wheel detents accumulate within a bounded scalar; pixel deltas are used
+where available except X11's documented unreliable pixel path. Qt already encodes
+natural scrolling in the delta, so it is not inverted twice. Oversized events are
+clamped before the engine call. Local navigation press/release pairs never become
+remote key bytes, including Kitty release-reporting mode and modifier release.
+Remote mouse mode is not reinterpreted as local history unless Shift is held.
+Remote mouse reports themselves, scrollbar UI and selection/search are pending.
+
+The new `terminal_history` test checks these behaviors against the actual pinned
+engine and QWidget, including history boundaries, primary/alternate separation,
+new-output preservation, Ctrl+C return, malicious-sized deltas and no SSH bytes
+from history navigation. These are offscreen synthetic events, not desktop wheel,
+RU/EN layout, real clipboard or complete fullscreen-program acceptance.
+
+The earlier manual VT run
+[39998901128](https://github.com/NetGraniz/NordSSH/actions/runs/39998901128) has
+finished. **Windows passed**: upstream core/C API tests reported 41/41 build steps
+and 6933 passes/68 skips across overlapping executables, then ReleaseSafe 45/45
+and C++ ABI/structural CTest 2/2. Do not sum overlapping upstream tests as unique
+coverage. Windows runner results do not erase the earlier local symlink failures.
+
+**Linux did not pass**: the core and C API test executables each failed the same
+`lib.tinyio.test.dirRealPathFile edge cases` test, expecting `NameTooLong` for an
+eight-byte output buffer but receiving length 8. Source inspection found the
+non-libc `/proc/self/fd` readlink fallback returns a truncated buffer length
+without reporting truncation. This identifies a concrete dependency issue; it is
+not a demonstrated terminal escape or memory overwrite. Our file/image/clipboard
+hooks remain disabled. No upstream source/security policy was changed and no
+test was suppressed. The Linux SDK did build, but the old workflow then skipped
+our ABI test because of the upstream failure. Updated its condition to collect
+ABI evidence after a successful SDK while retaining the failed upstream result.
+The modified manual workflow has not been rerun at this checkpoint.
+
+The product still has no user-facing native release or installer. Linux terminal
+approval remains open, along with the existing vault/session/SFTP/package gates.
+
+The combined Windows MSVC Debug CTest run passed **8/8 in 13.39 s**, including
+the new history test and the real loopback SSH byte path. This was against the
+local SDK runtime, not a clean-machine package or a Linux GUI run.
+After adding cancelled-paste/viewport and focus-change/key-release regressions,
+the final combined run also passed **8/8 in 11.70 s**. No existing vault, saved
+connection, signing key, user clipboard or production SSH host was used.
