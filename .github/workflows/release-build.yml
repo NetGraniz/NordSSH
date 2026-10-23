@@ -17,7 +17,7 @@ jobs:
       matrix:
         os: ${{ fromJSON(inputs.platform == 'linux' && '["ubuntu-22.04"]' || inputs.platform == 'windows' && '["windows-latest"]' || '["windows-latest","ubuntu-22.04"]') }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
@@ -29,6 +29,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev xvfb xdotool libfuse2 desktop-file-utils squashfs-tools
       - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - run: npm ci --ignore-scripts
+      - run: cargo fetch --locked --manifest-path src-tauri/Cargo.toml
+      - run: node test/collect-licenses.cjs artifacts/licenses
       - run: npm run build
       - run: npm test
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
@@ -39,42 +41,43 @@ jobs:
           NORDSSH_FIXTURE_OUTPUT: ${{ runner.temp }}/interchange-${{ runner.os }}.nordvault
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1
       - run: npm audit --omit=dev --audit-level=moderate
-      - name: Build Windows executable
+      - name: Build older Windows upgrade fixture
         if: runner.os == 'Windows'
-        run: npm run tauri -- build --no-bundle
-      - name: Build Linux AppImage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: node test/build-baseline.cjs
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: npm run tauri -- build --bundles nsis
+      - name: Build Linux installer and AppImage
         if: runner.os == 'Linux'
-        run: npm run tauri -- build --bundles appimage --config '{"bundle":{"active":true,"icon":["icons/128x128.png"]}}'
-      - name: Collect third-party notices
-        run: node test/collect-licenses.cjs artifacts/licenses
-      - name: Package Windows portable
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: npm run tauri -- build --bundles deb,appimage
+      - name: Native Windows first-launch UI
+        if: runner.os == 'Windows'
+        run: node test/native-windows.cjs
+      - name: Package and sign release assets
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: node test/package-release.cjs
+      - name: Windows install, upgrade and portable update checks
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path artifacts/portable -Force | Out-Null
-          Copy-Item src-tauri/target/release/nordssh.exe artifacts/portable/NordSSH.exe
-          Copy-Item assets/portable/nordssh.portable artifacts/portable/
-          Copy-Item assets/portable/README.txt artifacts/portable/
-          Copy-Item artifacts/licenses artifacts/portable/licenses -Recurse
-          Compress-Archive -Path artifacts/portable/* -DestinationPath artifacts/NordSSH-0.1.0-beta.1-windows-x64-portable.zip
-      - name: Linux native startup smoke and portable archive
+        run: ./test/windows-install.ps1 -Installer artifacts/release/NordSSH-0.1.0-windows-x64-setup.exe
+      - name: Debian install and upgrade checks
+        if: runner.os == 'Linux'
+        run: bash test/linux-install.sh artifacts/release/NordSSH-0.1.0-linux-amd64.deb
+      - name: Linux portable native startup
         if: runner.os == 'Linux'
         shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts/portable
-          cp src-tauri/target/release/bundle/appimage/*.AppImage artifacts/portable/NordSSH.AppImage
-          cp assets/portable/nordssh.portable assets/portable/README.txt artifacts/portable/
-          chmod +x artifacts/portable/NordSSH.AppImage
-          xvfb-run -a bash test/linux-startup.sh "$PWD/artifacts/portable/NordSSH.AppImage"
-          cp -R artifacts/licenses artifacts/portable/licenses
-          tar -czf artifacts/NordSSH-0.1.0-beta.1-linux-x64-portable.tar.gz -C artifacts/portable NordSSH.AppImage nordssh.portable README.txt licenses
+        run: xvfb-run -a bash test/linux-startup.sh "$PWD/artifacts/portable-linux/NordSSH.AppImage"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-${{ runner.os }}
-          path: |
-            artifacts/*.zip
-            artifacts/*.tar.gz
+          path: artifacts/release/*
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:

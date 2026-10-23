@@ -9,7 +9,7 @@ trap 'kill "$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true' 
 for i in $(seq 1 30); do
   if ! kill -0 "$app_pid" 2>/dev/null; then cat /tmp/nordssh-startup.log; exit 1; fi
   if xdotool search --name '^NordSSH$' >/dev/null 2>&1; then
-    echo 'PASS: Linux AppImage created a native NordSSH window under Xvfb (not a full UI test).'
+    echo 'PASS: Linux application created a native NordSSH window under Xvfb (not a full UI test).'
     exit 0
   fi
   sleep 1

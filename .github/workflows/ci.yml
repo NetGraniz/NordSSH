@@ -13,6 +13,8 @@ jobs:
           cache: npm
       - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - run: npm ci --ignore-scripts
+      - run: cargo fetch --locked --manifest-path src-tauri/Cargo.toml
+      - run: node test/collect-licenses.cjs artifacts/licenses
       - run: npm run build
       - run: npm test
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

@@ -1,6 +1,6 @@
 # Security and development status
 
-NordSSH is a development build, not an audited credential manager. Keep an
+NordSSH is not an audited credential manager. Keep an
 independent backup of keys and access details. Do not publish secrets in issues,
 screenshots, terminal transcripts or GitHub repositories.
 
@@ -65,7 +65,20 @@ resume controls, or remote destructive operations.
 
 ## Distribution
 
-This build checks public GitHub release metadata without a GitHub token. It does
-not download or execute updates. Automatic installation must remain disabled until
-signed package verification, data preservation and the installer upgrade path pass
-tests. A release on GitHub alone is not sufficient proof of package authenticity.
+The updater fetches a size-bounded manifest from this repository's stable release
+and accepts only HTTPS download URLs under its release path. Payloads are limited
+to 256 MiB and verified with a pinned minisign public key before installation.
+The authenticated signature comment must match the announced version; older or
+prerelease versions are not installed. The signing private key is outside the
+repository and provided to release jobs through a GitHub Actions secret.
+
+An update requires native confirmation and idle SSH/transfer state. An encrypted
+vault backup is saved first. Windows portable updates use an older-version helper
+that verifies the signature/version again, waits for the app to exit, and replaces
+only the executable with a same-directory staged file and recovery copy. Neither
+the portable data folder nor remembered unlock records are part of the payload.
+Installer tests must pass before publication; see TESTING.md for exact coverage.
+
+Minisign protects the updater channel, not the Windows publisher identity. The
+installer does not have an Authenticode certificate and may show OS warnings.
+A release page or checksum alone is not proof of package authenticity.

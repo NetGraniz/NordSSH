@@ -86,9 +86,9 @@ impl Envelope {
         aad
     }
     pub fn create(vault: &Vault, password: &str) -> Result<(Self, VaultKey), String> {
-        if password.chars().count() < 12 || password.len() > 4096 {
+        if password.chars().count() < 7 || password.len() > 4096 {
             return Err(
-                "Use a vault password of at least 12 characters (maximum 4096 bytes).".into(),
+                "Use a vault password of at least 7 characters (maximum 4096 bytes).".into(),
             );
         }
         let mut salt = [0; 16];
@@ -176,6 +176,10 @@ mod tests {
     #[test]
     fn short_password_and_future_format_rejected() {
         assert!(Envelope::create(&Vault::default(), "short").is_err());
+        assert!(Envelope::create(&Vault::default(), "123456").is_err());
+        assert!(Envelope::create(&Vault::default(), "пароль").is_err());
+        let (seven, _) = Envelope::create(&Vault::default(), "1234567").unwrap();
+        assert!(seven.unlock("1234567").is_ok());
         let (mut e, k) = Envelope::create(&Vault::default(), "fixture-only-password").unwrap();
         e.format = 999;
         assert!(e.read_vault(&k).is_err());

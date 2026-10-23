@@ -1,6 +1,6 @@
 {
   "name": "nordssh",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0",
   "private": true,
   "description": "Windows SSH and SFTP client with local vaults",
   "author": "NetGraniz",

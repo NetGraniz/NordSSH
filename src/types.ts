@@ -25,6 +25,7 @@ export interface Snapshot {
   settings: Settings;
   snippets: Snippet[];
   version: string;
+  knownHosts?: Record<string, string>;
 }
 export interface TerminalEvent {
   id: string;

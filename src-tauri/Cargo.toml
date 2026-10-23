@@ -1,6 +1,6 @@
 [package]
 name = "nordssh"
-version = "0.1.0-beta.1"
+version = "0.1.0"
 description = "NordSSH desktop client"
 authors = ["NetGraniz"]
 edition = "2024"
@@ -15,6 +15,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = { version = "=2.14.0", default-features = false, features = ["rustls-tls"] }
+minisign-verify = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
@@ -35,7 +37,7 @@ base64 = "0.22"
 keyring = { version = "3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_System_Memory", "Win32_Foundation"] }
+windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_System_Memory", "Win32_System_Threading", "Win32_Foundation"] }
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 glib = "0.18.5"

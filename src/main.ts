@@ -19,7 +19,7 @@ app.innerHTML = `
 <main><section class="page" id="hosts-page"><div class="page-top"><div><h2>Подключения</h2><span class="muted">Твои серверы. В одном месте.</span></div></div><div class="tools"><input id="search" placeholder="Поиск по имени, адресу или хранилищу" aria-label="Поиск серверов"><button id="favorites">☆ Избранное</button></div><div class="cards" id="hosts"></div><div class="empty" id="empty-hosts"><div class="empty-mark">&gt;_</div><h2>Первое подключение</h2><p>Добавь адрес сервера и способ входа. NordSSH запомнит подключение, а пароль сохранит только с твоего разрешения.</p><button class="primary" id="first-host">Добавить сервер</button></div></section>
 <section id="terminal-page" hidden style="flex:1;min-height:0;flex-direction:column"><div class="tabs" id="tabs"></div><div class="terminal-toolbar"><span class="secure-dot"></span><span id="terminal-status">Нет подключений</span><div class="spacer"></div><button id="toggle-sftp">SFTP</button><button id="paste">Вставить</button></div><div class="terminal-area" id="terminal-area"><div class="empty" id="empty-terminal"><div class="empty-mark">&gt;_</div><h2>Здесь будет терминал</h2><p>Подключись к серверу из списка слева. Демонстрационных подключений здесь нет.</p></div></div><div class="sftp" id="sftp" hidden><div class="sftp-toolbar"><button id="sftp-up" title="Родительская папка">↑</button><input id="sftp-path" value="." aria-label="Удалённый каталог"><button id="sftp-go">Открыть</button><button id="sftp-upload">Загрузить файл</button></div><div id="sftp-status" class="muted"></div><table><thead><tr><th>Имя</th><th>Размер</th><th></th></tr></thead><tbody id="sftp-rows"></tbody></table></div></section>
 <section class="page" id="snippets-page" hidden><div class="page-top"><div><h2>Быстрые команды</h2><span class="muted">Вставка в активный терминал — без автоматического выполнения.</span></div><div class="spacer"></div><button class="primary" id="add-snippet">＋ Команда</button></div><div id="snippets"></div></section>
-<section class="page" id="settings-page" hidden><div class="settings"><h2>Настройки</h2><div class="setting-row"><div>Цветовая тема<br><small>Интерфейс и терминал</small></div><select id="theme"><option value="nord">Nord · зелёный</option><option value="midnight">Midnight · фиолетовый</option></select></div><div class="setting-row"><div>Размер шрифта терминала</div><input id="font-size" type="number" min="11" max="24" value="14"></div><div class="setting-row"><label for="auto-updates">Проверять обновления при запуске</label><input id="auto-updates" type="checkbox"></div><div class="notice">Данные хранятся только локально. Пароль нужен для переноса и восстановления; на своём устройстве разблокировку можно запомнить. Сохрани пароль отдельно от программы.</div><h3>Бета-версия</h3><p class="muted">Разделение терминалов, SSH Agent, туннели и установка подписанных обновлений ещё не подключены. Сохраняй отдельные резервные копии важных доступов.</p></div></section></main>
+<section class="page" id="settings-page" hidden><div class="settings"><h2>Настройки</h2><div class="setting-row"><div>Цветовая тема<br><small>Интерфейс и терминал</small></div><select id="theme"><option value="nord">Nord · зелёный</option><option value="midnight">Midnight · фиолетовый</option></select></div><div class="setting-row"><div>Размер шрифта терминала</div><input id="font-size" type="number" min="11" max="24" value="14"></div><div class="setting-row"><label for="auto-updates">Проверять обновления при запуске</label><input id="auto-updates" type="checkbox"></div><div class="notice">Данные хранятся только локально. Пароль нужен для переноса и восстановления; на своём устройстве разблокировку можно запомнить. Сохрани пароль отдельно от программы.</div><h3>Обновления</h3><p class="muted">Кнопка сверху проверяет GitHub Releases. Новая версия скачивается и устанавливается после твоего подтверждения и проверки подписи. Сначала закрой SSH-подключения и передачи файлов. Перед обновлением программа сохраняет зашифрованную резервную копию хранилища.</p></div></section></main>
 <footer><span id="footer-status">Загрузка хранилища…</span><div class="spacer"></div><span>NordSSH · Windows / Linux</span></footer>
 <dialog id="host-dialog"><form id="host-form"><h2 id="host-title">Новое подключение</h2><div class="form-grid"><label class="field full">Название<input name="name" required maxlength="256" placeholder="Мой сервер"></label><label class="field">Адрес<input name="hostname" required maxlength="256" placeholder="192.168.1.10"></label><label class="field">Порт<input name="port" type="number" value="22" min="1" max="65535" required></label><label class="field">Пользователь<input name="username" required maxlength="256" placeholder="administrator"></label><label class="field">Хранилище<input name="vault" value="Личное" required maxlength="256"></label><label class="field full">Способ входа<select name="auth"><option value="password">Пароль</option><option value="key">Приватный ключ</option><option value="certificate">Ключ + сертификат OpenSSH</option></select></label><label class="field full" id="password-field">Пароль<input name="password" type="password" autocomplete="off" placeholder="Оставь пустым, чтобы сохранить прежний"></label><div class="field full" id="key-field" hidden><label>Приватный ключ</label><div class="key-picker"><input name="keyPath" readonly aria-label="Приватный ключ"><button type="button" id="choose-key">Выбрать</button></div><label>Парольная фраза ключа</label><input name="passphrase" type="password" autocomplete="off"></div><div class="field full" id="cert-field" hidden><label>Сертификат OpenSSH</label><div class="key-picker"><input name="certificatePath" readonly aria-label="Сертификат"><button type="button" id="choose-cert">Выбрать</button></div></div><label class="field inline"><input name="saveSecret" type="checkbox" checked> Сохранить доступ в Windows</label><label class="field inline"><input name="favorite" type="checkbox"> Избранное</label></div><p class="error" id="host-error"></p><div class="form-actions"><button type="button" id="cancel-host">Отмена</button><button class="primary" type="submit">Сохранить</button></div></form></dialog>
 <dialog id="credential-dialog"><form id="credential-form"><h2>Данные для подключения</h2><p class="muted">Сохранённый доступ не подошёл или отсутствует. Эти данные используются только для одной попытки подключения.</p><label class="field">Пароль / парольная фраза<input id="one-time-secret" type="password" autocomplete="off"></label><div class="form-actions"><button type="button" id="cancel-credential">Отмена</button><button type="submit" class="primary">Подключиться</button></div></form></dialog>
@@ -109,6 +109,47 @@ async function refresh() {
   renderHosts();
   renderSnippets();
   applySettings();
+  renderTrustedKeys();
+}
+function renderTrustedKeys() {
+  let section = document.getElementById("trusted-server-keys");
+  if (!section) {
+    section = document.createElement("section");
+    section.id = "trusted-server-keys";
+    document.querySelector(".settings")!.append(section);
+  }
+  section.replaceChildren();
+  const heading = document.createElement("h3");
+  heading.textContent = "Доверенные ключи серверов";
+  section.append(heading);
+  const entries = Object.entries(snapshot.knownHosts ?? {});
+  if (!entries.length) {
+    const text = document.createElement("p");
+    text.className = "muted";
+    text.textContent =
+      "Ключ появится здесь после подтверждения отпечатка при подключении.";
+    section.append(text);
+  }
+  for (const [endpoint, fingerprint] of entries) {
+    const row = document.createElement("div");
+    row.className = "setting-row";
+    const text = document.createElement("div");
+    text.textContent = endpoint;
+    const key = document.createElement("small");
+    key.textContent = fingerprint;
+    text.append(document.createElement("br"), key);
+    row.append(
+      text,
+      action(
+        "Удалить доверие",
+        () =>
+          void invokeSafe<boolean>("forget_host_key", { endpoint, fingerprint })
+            .then(() => refresh())
+            .catch((error) => toast(message(error))),
+      ),
+    );
+    section.append(row);
+  }
 }
 function renderHosts() {
   const query = el<HTMLInputElement>("search").value.trim().toLocaleLowerCase();
@@ -666,8 +707,53 @@ async function saveAppearance() {
 for (const id of ["theme", "font-size", "auto-updates"])
   el(id).onchange = () => void saveAppearance();
 let checking = false;
+let availableUpdate: string | undefined;
+let installing = false;
+async function installUpdate() {
+  if (installing || checking) return;
+  installing = true;
+  const dialog = document.createElement("dialog");
+  dialog.innerHTML = `<h2>Обновление NordSSH</h2><p id="update-progress-text">Ожидаю подтверждение установки…</p><progress id="update-progress" aria-label="Загрузка обновления"></progress><p class="muted">Хранилище останется на месте. После установки программа перезапустится.</p>`;
+  dialog.id = "update-dialog";
+  dialog.addEventListener("cancel", (event) => event.preventDefault());
+  document.body.append(dialog);
+  dialog.showModal();
+  const output = new Channel<{
+    phase: string;
+    received: number;
+    total: number | null;
+  }>();
+  output.onmessage = (event) => {
+    const progress = el<HTMLProgressElement>("update-progress");
+    if (event.total) {
+      progress.max = event.total;
+      progress.value = event.received;
+    }
+    el("update-progress-text").textContent =
+      event.phase === "verify"
+        ? "Проверяю подпись и версию…"
+        : event.phase === "install"
+          ? "Устанавливаю обновление…"
+          : `Скачиваю обновление: ${(event.received / 1048576).toFixed(1)} МБ${event.total ? ` из ${(event.total / 1048576).toFixed(1)} МБ` : ""}`;
+  };
+  try {
+    const result = await invokeSafe<string>("install_update", { output });
+    if (result === "current") {
+      availableUpdate = undefined;
+      el("updates").textContent = "Обновлений нет";
+    }
+    if (result !== "restarting" && result !== "cancelled")
+      toast("Обновление завершено.");
+  } catch (error) {
+    toast(message(error));
+  } finally {
+    dialog.close();
+    dialog.remove();
+    installing = false;
+  }
+}
 async function checkUpdates(quiet = false) {
-  if (checking) return;
+  if (checking || installing) return;
   checking = true;
   const b = el<HTMLButtonElement>("updates");
   b.disabled = true;
@@ -678,14 +764,16 @@ async function checkUpdates(quiet = false) {
     );
     b.textContent =
       result.status === "available"
-        ? `Доступна ${result.version}`
+        ? `Обновить до ${result.version}`
         : "Обновлений нет";
+    availableUpdate =
+      result.status === "available" ? result.version : undefined;
     if (!quiet)
       toast(
         result.status === "no-release"
-          ? "Публичных релизов ещё нет. Автоматическая установка появится после настройки подписанных пакетов."
+          ? "Обновлений пока нет."
           : result.status === "available"
-            ? `Есть версия ${result.version}. В этой сборке установка обновлений ещё не подключена.`
+            ? `Есть версия ${result.version}. Нажми «Обновить» для установки подписанного пакета.`
             : "Установлена актуальная версия.",
       );
   } catch (e) {
@@ -696,7 +784,8 @@ async function checkUpdates(quiet = false) {
     b.disabled = false;
   }
 }
-el("updates").onclick = () => void checkUpdates();
+el("updates").onclick = () =>
+  void (availableUpdate ? installUpdate() : checkUpdates());
 void vaultUI(
   async () => {
     await refresh();

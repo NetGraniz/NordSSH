@@ -1,7 +1,8 @@
 # NordSSH
 
 Local SSH and SFTP client for Windows and Linux. No cloud account, vault sync
-service or subscription. The first portable beta is `0.1.0-beta.1`.
+service or subscription. Version `0.1.0` adds installers and signed updates to
+the earlier portable beta.
 
 ## Connections and terminal
 
@@ -12,6 +13,8 @@ service or subscription. The first portable beta is `0.1.0-beta.1`.
 - Hosts organized by vault labels, favorites and search; saved command snippets.
 - Unknown server keys require confirmation before authentication. Changed trusted
   keys are refused. Host-certificate CA trust is not implemented.
+- Settings lists trusted server fingerprints. Removing one requires native
+  confirmation with all sessions closed; the next connection asks for trust again.
 - SFTP browsing, downloads finalized through a temporary local file, and uploads
   using exclusive creation. Existing remote files are not overwritten. A failed
   upload may leave a partial remote file.
@@ -25,7 +28,7 @@ Argon2id (64 MiB, three passes, parallelism one). A random vault key encrypts da
 the password-derived key wraps that key. Format parameters are fixed and versioned,
 not accepted as unbounded work requests from imported files.
 
-Choose a password of at least 12 characters at first use. Keep it separately:
+Choose a password of at least 7 characters at first use; a long phrase is safer. Keep it separately:
 NordSSH cannot recover a forgotten password. **Remember on this device** avoids
 re-entering it on that computer. Only the unlock key is protected by Windows DPAPI
 or Linux Secret Service. A new computer needs the vault password once; device
@@ -43,7 +46,14 @@ An earlier Windows `vault.dpapi` is migrated after setting a portable-vault
 password. Its original file stays untouched. Saved secrets never appear in
 frontend snapshots. This is a beta, not an audited password manager; keep backups.
 
-## Portable mode and updates
+## Installers, portable mode and updates
+
+Download the Windows `-setup.exe` installer or the Linux `.deb` package from
+[Releases](https://github.com/NetGraniz/NordSSH/releases). The Windows installer
+installs for the current user, adds Start-menu shortcuts and includes the WebView2
+bootstrapper. Linux packages declare GTK/WebKit dependencies. Installing a newer
+package over the old one preserves the user-profile vault and device unlock keys.
+Portable archives remain available separately.
 
 Extract the full portable archive into a writable folder. Keep `nordssh.portable`
 beside `NordSSH.exe` or `NordSSH.AppImage`. Data then lives in
@@ -58,10 +68,19 @@ and may need FUSE or extract-and-run mode. Portable does not mean every operatin
 system library is bundled.
 
 The header checks stable public GitHub Releases; it does not announce prereleases.
-Download this beta from the [Releases page](https://github.com/NetGraniz/NordSSH/releases).
-Automatic download/installation remains
-disabled until signed artifacts and the installer upgrade path are verified.
+When an update is available, click **Update** and confirm the native prompt.
+Close SSH sessions and transfers first. NordSSH downloads a bounded package,
+verifies its minisign signature and signed version, creates an encrypted vault
+backup, then installs and restarts. A damaged payload, version mismatch or
+untrusted download source is refused before installation.
+
+Windows installed copies use the installer. Portable Windows copies use a
+separate signed EXE replacement helper, retain the portable marker/data folder,
+and keep the previous executable for recovery. Linux uses its matching Debian
+or AppImage package; Debian installation can request OS administrator permission.
 No GitHub token is embedded in the client. Update checks can be disabled.
+Update signatures are not Windows Authenticode certificates: this first installer
+can still show an unknown-publisher/SmartScreen warning.
 
 ## Development
 
@@ -82,6 +101,6 @@ Release builds run in GitHub Actions on Windows and Ubuntu 22.04. Loopback tests
 use generated synthetic keys and credentials, never production hosts. See
 TESTING.md for the scope and SECURITY.md for limitations.
 
-Still pending: split panes, SSH Agent, keyboard-interactive/2FA prompts, tunnels,
-jump hosts, transfer progress/resume/cancellation, editable host-key trust and
-signed automatic installation. Account sync and telemetry are not part of NordSSH.
+Not included in 0.1: split panes, SSH Agent, keyboard-interactive/2FA prompts,
+tunnels, jump hosts and transfer progress/resume/cancellation. Account sync and
+telemetry are not part of NordSSH.

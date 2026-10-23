@@ -1,5 +1,23 @@
 # Development checks
 
+## 0.1.0 — installer/update candidate, 2026-10-23
+
+Local checks passed 19 Rust tests, warning-denied Clippy, the frontend build,
+four Node tests and the compiled-frontend browser suite. New tests cover signed
+artifact validation, payload tampering, signed-version mismatch and rejection of
+untrusted update URLs. The password-boundary test accepts exactly seven characters
+and rejects six; UI tests distinguish short passwords from mismatched confirmation.
+
+Release workflows now build an actual older Windows binary/installer, then test
+upgrade to the candidate, repeat installation, Start-menu shortcuts, native startup,
+uninstall retention and a signed portable-EXE replacement. A separate native
+WebView2 test exercises the real Rust IPC without mocks, including first-vault
+creation with seven characters, saved credentials, settings, remembered reopening
+and wrong-password recovery. Debian tests install a synthetic older package
+version, upgrade/reinstall the candidate and verify encrypted-vault retention.
+These CI checks are pending at this candidate's initial commit. An installer is
+not approved for publication until its job succeeds.
+
 ## 0.1.0-beta.1 — portable vault, 2026-10-23
 
 Local checks passed portable encryption/decryption, wrong-password rejection,

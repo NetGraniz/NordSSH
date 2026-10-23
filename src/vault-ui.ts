@@ -13,7 +13,7 @@ export async function vaultUI(
 ) {
   const dialog = document.createElement("dialog");
   dialog.id = "vault-dialog";
-  dialog.innerHTML = `<form id="vault-form"><h2 id="vault-title"></h2><p id="vault-description" class="muted"></p><label class="field">Пароль хранилища<input id="vault-password" type="password" autocomplete="off" required maxlength="4096"></label><br><label class="field" id="vault-confirm-field">Повтори пароль<input id="vault-confirm" type="password" autocomplete="off" maxlength="4096"></label><br><label class="field inline" id="vault-remember-field"><input id="vault-remember" type="checkbox" checked> Запомнить на этом устройстве</label><p class="error" id="vault-error" role="alert"></p><div class="form-actions"><button type="button" id="vault-cancel">Отмена</button><button class="primary" type="submit" id="vault-submit">Продолжить</button></div><button type="button" class="flat" id="vault-restore">Восстановить из файла</button></form>`;
+  dialog.innerHTML = `<form id="vault-form"><h2 id="vault-title"></h2><p id="vault-description" class="muted"></p><label class="field"><span id="vault-password-label">Пароль хранилища</span><input id="vault-password" type="password" autocomplete="off" required maxlength="4096" aria-describedby="vault-password-help"></label><small id="vault-password-help" class="muted"></small><br><label class="field" id="vault-confirm-field">Повтори новый пароль<input id="vault-confirm" type="password" autocomplete="off" maxlength="4096"></label><br><label class="field inline"><input id="vault-show-password" type="checkbox"> Показать пароль</label><label class="field inline" id="vault-remember-field"><input id="vault-remember" type="checkbox" checked> Запомнить на этом устройстве</label><p class="error" id="vault-error" role="alert"></p><div class="form-actions"><button type="button" id="vault-cancel">Отмена</button><button class="primary" type="submit" id="vault-submit">Продолжить</button></div><button type="button" class="flat" id="vault-restore">Восстановить из файла</button></form>`;
   document.body.append(dialog);
   const get = <T extends HTMLElement>(id: string) =>
     document.getElementById(id) as T;
@@ -39,7 +39,7 @@ export async function vaultUI(
         : mode === "import"
           ? "Импорт хранилища"
           : create
-            ? "Создай переносимое хранилище"
+            ? "Первый запуск · создай хранилище"
             : "Открой хранилище";
     get("vault-description").textContent =
       mode === "export"
@@ -50,9 +50,26 @@ export async function vaultUI(
             ? (status.migration
                 ? "Данные старого Windows-хранилища перенесутся в новый формат. Оригинал останется нетронутым. "
                 : "") +
-              "Пароль нужен для переноса и восстановления. Запиши его: без него восстановить доступ на другом устройстве нельзя. На этом компьютере его можно запомнить."
+              "Придумай новый пароль для сохранённых подключений. Это НЕ пароль Windows и НЕ пароль SSH-сервера. Введи его дважды. Он понадобится при переносе и восстановлении; запиши его отдельно."
             : "При переносе на новый компьютер введи пароль один раз. Запоминание не переносится вместе с файлом.";
     get("vault-confirm-field").hidden = !(create || mode === "export");
+    get("vault-password-label").textContent =
+      create || mode === "export"
+        ? "Новый пароль хранилища"
+        : "Пароль хранилища";
+    get("vault-password-help").textContent =
+      create || mode === "export"
+        ? "Минимум 7 символов. Для защиты резервной копии лучше длинная фраза."
+        : "Введи пароль, который задал при создании или экспорте этого хранилища.";
+    get<HTMLButtonElement>("vault-submit").textContent = create
+      ? "Создать хранилище"
+      : mode === "open"
+        ? "Открыть хранилище"
+        : mode === "export"
+          ? "Экспортировать"
+          : "Выбрать файл";
+    for (const id of ["vault-password", "vault-confirm"])
+      get<HTMLInputElement>(id).type = "password";
     get<HTMLInputElement>("vault-confirm").required =
       create || mode === "export";
     get("vault-remember-field").hidden = mode === "export";
@@ -74,16 +91,21 @@ export async function vaultUI(
     const password = get<HTMLInputElement>("vault-password").value;
     const confirmation = get<HTMLInputElement>("vault-confirm").value;
     const create = operation === "open" && !status.initialized;
-    if (
-      (create || operation === "export") &&
-      (password !== confirmation || [...password].length < 12)
-    ) {
+    if ((create || operation === "export") && [...password].length < 7) {
       get("vault-error").textContent =
-        "Пароли должны совпадать и содержать минимум 12 символов.";
+        "Пароль слишком короткий: нужно минимум 7 символов.";
+      return;
+    }
+    if ((create || operation === "export") && password !== confirmation) {
+      get("vault-error").textContent =
+        "Повтор пароля не совпадает. Введи тот же пароль во втором поле.";
+      get<HTMLInputElement>("vault-confirm").focus();
       return;
     }
     busy = true;
     get<HTMLButtonElement>("vault-submit").disabled = true;
+    const submitLabel = get<HTMLButtonElement>("vault-submit").textContent;
+    get<HTMLButtonElement>("vault-submit").textContent = "Подожди…";
     get("vault-error").textContent = "";
     try {
       const remember = get<HTMLInputElement>("vault-remember").checked;
@@ -114,7 +136,15 @@ export async function vaultUI(
       get<HTMLInputElement>("vault-confirm").value = "";
       busy = false;
       get<HTMLButtonElement>("vault-submit").disabled = false;
+      get<HTMLButtonElement>("vault-submit").textContent = submitLabel;
     }
+  };
+  get("vault-show-password").onchange = () => {
+    const type = get<HTMLInputElement>("vault-show-password").checked
+      ? "text"
+      : "password";
+    for (const id of ["vault-password", "vault-confirm"])
+      get<HTMLInputElement>(id).type = type;
   };
   dialog.addEventListener("cancel", (e) => {
     if (operation === "open" || busy) e.preventDefault();

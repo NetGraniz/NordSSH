@@ -3,6 +3,7 @@ mod device;
 mod model;
 mod ssh;
 mod storage;
+mod updates;
 
 use model::*;
 use serde::Serialize;
@@ -11,7 +12,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
 use tauri::{Manager, State, ipc::Channel};
@@ -22,13 +23,16 @@ pub struct AppState {
     pending: Arc<AtomicUsize>,
     transfers: AtomicUsize,
     portable: bool,
+    maintenance: Arc<AtomicBool>,
 }
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Snapshot {
     hosts: Vec<Host>,
     settings: Settings,
     snippets: Vec<Snippet>,
     version: String,
+    known_hosts: std::collections::BTreeMap<String, String>,
 }
 #[tauri::command]
 fn vault_status(state: State<AppState>) -> Result<storage::Status, String> {
@@ -174,7 +178,39 @@ fn snapshot(state: State<AppState>) -> Result<Snapshot, String> {
         settings: store.vault.settings.clone(),
         snippets: store.vault.snippets.clone(),
         version: env!("CARGO_PKG_VERSION").into(),
+        known_hosts: store.vault.known_hosts.clone(),
     })
+}
+#[tauri::command]
+async fn forget_host_key(
+    state: State<'_, AppState>,
+    endpoint: String,
+    fingerprint: String,
+) -> Result<bool, String> {
+    idle(&state)?;
+    {
+        let s = state.store.lock().map_err(|_| "Vault lock unavailable")?;
+        s.require_unlocked()?;
+        if s.vault.known_hosts.get(&endpoint) != Some(&fingerprint) {
+            return Err("Trusted key changed; refresh the list".into());
+        }
+    }
+    let confirm=rfd::AsyncMessageDialog::new().set_title("Удалить доверенный ключ сервера?")
+        .set_description(format!("{endpoint}\n{fingerprint}\nПри следующем подключении потребуется заново сверить отпечаток. Смена пароля пользователя не требует удаления ключа сервера."))
+        .set_level(rfd::MessageLevel::Warning).set_buttons(rfd::MessageButtons::YesNo).show().await;
+    if confirm != rfd::MessageDialogResult::Yes {
+        return Ok(false);
+    }
+    let mut s = state.store.lock().map_err(|_| "Vault lock unavailable")?;
+    idle(&state)?;
+    s.update(|v| {
+        if v.known_hosts.get(&endpoint) != Some(&fingerprint) {
+            return Err("Trusted key changed; nothing removed".into());
+        }
+        v.known_hosts.remove(&endpoint);
+        Ok(())
+    })?;
+    Ok(true)
 }
 #[tauri::command]
 async fn save_host(
@@ -323,6 +359,9 @@ async fn connect(
     }
     let pending = state.pending.fetch_add(1, Ordering::SeqCst);
     let _guard = PendingGuard(state.pending.clone());
+    if state.maintenance.load(Ordering::SeqCst) {
+        return Err("An update is running; reconnect after restart".into());
+    }
     if pending >= 8 {
         return Err("Too many pending connections".into());
     }
@@ -566,74 +605,13 @@ async fn sftp_upload(state: State<'_, AppState>, id: String, path: String) -> Re
     Ok(true)
 }
 
-#[derive(Serialize)]
-struct UpdateInfo {
-    status: String,
-    version: String,
-    url: String,
-}
-#[tauri::command]
-async fn check_updates() -> Result<UpdateInfo, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(12))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|_| "Cannot initialize update check")?;
-    let mut response = client
-        .get("https://api.github.com/repos/NetGraniz/NordSSH/releases/latest")
-        .header("User-Agent", "NordSSH")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|_| "GitHub is unavailable; SSH is unaffected")?;
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Ok(UpdateInfo {
-            status: "no-release".into(),
-            version: String::new(),
-            url: String::new(),
-        });
-    }
-    if !response.status().is_success() {
-        return Err("GitHub rejected the update check; try later".into());
-    }
-    if response.content_length().is_some_and(|n| n > 1024 * 1024) {
-        return Err("Invalid release response".into());
-    }
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| "Cannot read release metadata")?
-    {
-        if bytes.len() + chunk.len() > 1024 * 1024 {
-            return Err("Release metadata exceeds size limit".into());
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    let json: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|_| "Invalid GitHub response")?;
-    let version = json["tag_name"]
-        .as_str()
-        .ok_or("Missing release version")?
-        .trim_start_matches('v');
-    let parsed = semver::Version::parse(version).map_err(|_| "Unsupported release version")?;
-    let current = semver::Version::parse(env!("CARGO_PKG_VERSION"))
-        .map_err(|_| "Invalid application version")?;
-    let status = if parsed > current && parsed.pre.is_empty() {
-        "available"
-    } else {
-        "current"
-    };
-    Ok(UpdateInfo {
-        status: status.into(),
-        version: version.into(),
-        url: "https://github.com/NetGraniz/NordSSH/releases".into(),
-    })
-}
-
 pub fn run() {
+    if updates::helper_mode() {
+        return;
+    }
     let _ = rustls::crypto::ring::default_provider().install_default();
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -662,6 +640,7 @@ pub fn run() {
                 pending: Arc::new(AtomicUsize::new(0)),
                 transfers: AtomicUsize::new(0),
                 portable: portable.is_some(),
+                maintenance: Arc::new(AtomicBool::new(false)),
             });
             Ok(())
         })
@@ -696,6 +675,7 @@ pub fn run() {
             vault_export,
             vault_import,
             snapshot,
+            forget_host_key,
             save_host,
             delete_host,
             save_settings,
@@ -710,7 +690,8 @@ pub fn run() {
             sftp_list,
             sftp_download,
             sftp_upload,
-            check_updates
+            updates::check_updates,
+            updates::install_update
         ])
         .run(tauri::generate_context!())
         .expect("NordSSH could not start; existing vault data was not reset");

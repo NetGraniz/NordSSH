@@ -150,13 +150,25 @@ const net = require("node:net");
     });
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.locator("#vault-dialog[open]").waitFor();
+    await page.locator("#vault-password").fill("short");
+    await page.locator("#vault-confirm").fill("short");
+    await page.locator("#vault-submit").click();
+    await page
+      .getByText("Пароль слишком короткий: нужно минимум 7 символов.", {
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(await page.locator("#vault-password").inputValue(), "short");
     await page.locator("#vault-password").fill("synthetic-vault-password");
     await page.locator("#vault-confirm").fill("mismatch");
     await page.locator("#vault-submit").click();
     await page
-      .getByText("Пароли должны совпадать и содержать минимум 12 символов.", {
-        exact: true,
-      })
+      .getByText(
+        "Повтор пароля не совпадает. Введи тот же пароль во втором поле.",
+        {
+          exact: true,
+        },
+      )
       .waitFor();
     await page.locator("#vault-confirm").fill("synthetic-vault-password");
     await page.locator("#vault-submit").click();
