@@ -424,3 +424,22 @@ ReleaseSafe VT SDK. The key fixture now contains 24 positive/negative cases,
 including all three ECDSA curves, encrypted RSA and a mismatched outer public
 section. Server counters assert zero authentication starts for local/trust/KDF
 rejection, and actual server-side authentication for remote rejection cases.
+
+The new key/payload code passed GitHub native checks on Windows and Ubuntu at
+78a452c: run 40039888016. The Linux crypto/SSH ASan+UBSan job ran **6/6 in 34.25 s**,
+including the 24-case independent key/user-certificate fixture. Qt desktop tests
+are not part of that Linux job.
+
+The full patched Linux upstream run in 40037749689 now passes: **41/41 build
+steps, 6919 passes/80 skips across overlapping test executables**, including the
+original truncation failure and added regression. ReleaseSafe SDK built 45/45.
+Our C++ step then exposed a separate integration mistake: CMake searched for
+`libghostty-vt-static.a`, while this pinned upstream installs `libghostty-vt.a`
+on Unix and `ghostty-vt-static.lib` on Windows. Corrected exact static archive
+discovery after checking upstream build.zig/pkg-config generation and CMake docs;
+no shared-library fallback or test suppression is introduced.
+
+Added an explicit SDK/ABI-only workflow input, defaulting to full upstream tests,
+to verify build-system changes without repeating the unchanged ~30-minute
+upstream suite. The new scoped run and old full Windows result follow below;
+scoped CI is not presented as a full product or terminal gate.

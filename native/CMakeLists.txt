@@ -12,7 +12,14 @@ option(NORDSSH_BUILD_TERMINAL "Build native Qt raster terminal engineering gate"
 set(NORDSSH_GHOSTTY_SDK "" CACHE PATH "Hash/commit-verified Ghostty VT SDK prefix")
 if(NORDSSH_BUILD_VT_GATE OR NORDSSH_BUILD_TERMINAL)
     find_path(NORDSSH_GHOSTTY_INCLUDE ghostty/vt.h PATHS "${NORDSSH_GHOSTTY_SDK}/include" NO_DEFAULT_PATH REQUIRED)
-    find_library(NORDSSH_GHOSTTY_STATIC NAMES ghostty-vt-static PATHS "${NORDSSH_GHOSTTY_SDK}/lib" NO_DEFAULT_PATH REQUIRED)
+    # Upstream installs a distinct static filename on Windows, but the normal
+    # libghostty-vt.a on Unix. Never fall back to a shared/import library.
+    if(WIN32)
+        set(_nordssh_vt_archive ghostty-vt-static.lib)
+    else()
+        set(_nordssh_vt_archive libghostty-vt.a)
+    endif()
+    find_file(NORDSSH_GHOSTTY_STATIC NAMES "${_nordssh_vt_archive}" PATHS "${NORDSSH_GHOSTTY_SDK}/lib" NO_DEFAULT_PATH REQUIRED)
 endif()
 if(NORDSSH_BUILD_VT_GATE AND BUILD_TESTING)
     add_executable(ghostty_abi_tests tests/GhosttyAbiTests.cpp)

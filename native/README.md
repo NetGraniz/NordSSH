@@ -72,6 +72,11 @@ The optional `NORDSSH_BUILD_VT_GATE=ON` uses a verified SDK prefix supplied as
 `NORDSSH_GHOSTTY_SDK`. It builds only our C++ ABI assertion executable; it is not
 the product renderer. The manual Native VT engineering workflow repeats the
 pinned upstream/SDK/ABI checks on Windows and Linux without publishing a release.
+Build a fresh exact-pinned Ghostty checkout with the reviewed
+[TinyIo patch](patches/README.md); the script refuses tracked local changes.
+The manual workflow defaults to full upstream tests. Its explicit
+`upstream_tests=false` mode repeats SDK/ABI integration only after build-system
+changes; a green scoped run is not a full terminal acceptance report.
 
 `NORDSSH_BUILD_TERMINAL=ON` builds the raster adapter and `terminal_widget` test
 using the same SDK prefix and pinned Qt. When `NORDSSH_BUILD_SSH=ON` is also set,

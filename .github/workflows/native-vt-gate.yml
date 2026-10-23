@@ -1,6 +1,12 @@
 name: Native VT engineering gate
+run-name: 'Native VT SDK/ABI (repeat full upstream: ${{ inputs.upstream_tests }})'
 on:
   workflow_dispatch:
+    inputs:
+      upstream_tests:
+        description: 'Repeat full upstream tests (false runs SDK/ABI only; not a full terminal gate)'
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:
@@ -52,6 +58,7 @@ jobs:
           $taskBin = Join-Path $taskExtract $taskName
           Add-Content -LiteralPath $env:GITHUB_PATH -Value $taskBin
       - name: Upstream native terminal and C API tests
+        if: ${{ inputs.upstream_tests }}
         working-directory: vt-source
         run: zig build test-lib-vt -Demit-lib-vt -Demit-themes=false -Dtarget=${{ matrix.target }} -Dsimd=false -j1 --summary all
       - name: ReleaseSafe SDK
