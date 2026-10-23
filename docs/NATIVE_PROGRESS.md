@@ -123,6 +123,9 @@ The independently run upstream core test executable completed with **3220 passed
 filesystem symlinks in `lib.tinyio` tests. Windows security policy was not changed.
 This is a partial result, not a passing full upstream gate. An earlier protocol
 run was interrupted for diagnosis; its exit-255 report is not an engine crash.
+The separate upstream C API test executable also completed: **3707 passed,
+35 skipped, 2 failed**, with the same two symlink-permission failures. These two
+executables contain overlapping tests; their counts are not unique coverage.
 
 Our `ghostty_abi` C++/MSVC static-link test passed (0.03 s): fragmented UTF-8,
 combining/wide text, alternate screen restore, resize, disabled clipboard hooks,
@@ -134,6 +137,22 @@ full memory/RSS, mouse/key encoding or fullscreen-program gates.
 The manual `native-vt-gate.yml` repeats upstream tests and SDK/C++ ABI checks on
 Windows and Ubuntu with pinned source and hash-verified Zig downloads. Results
 must be read before marking either platform passed. No app release is generated.
+
+## Latest combined local and CI results
+
+Windows Debug CTest, after the SSH fixture additionally asserted receipt of the
+100x40 resize: **5/5 passed** in 10.35 s (`ghostty_abi`, `vault_crypto`,
+`ssh_transport`, `paste_router`, `vault_format`). Runtime DLLs came from the
+installed Qt/libssh/OpenSSL SDK prefixes; the cached OpenSSL import-library path
+still pointed to the matching source build. This is not a clean-machine package.
+
+[Run 39997931879](https://github.com/NetGraniz/NordSSH/actions/runs/39997931879)
+passed for `eac6738`, including the Ubuntu crypto/SSH fixture under ASan/UBSan.
+[Run 39998899384](https://github.com/NetGraniz/NordSSH/actions/runs/39998899384)
+passed the same core/crypto/SSH jobs for `066bac1`. Qt input and Ghostty ABI are
+not enabled by these automatic jobs. The manual cross-platform VT run is
+[39998901128](https://github.com/NetGraniz/NordSSH/actions/runs/39998901128),
+whose terminal tests were still in progress at this checkpoint.
 
 ## Next exit criteria
 

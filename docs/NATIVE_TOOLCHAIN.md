@@ -101,8 +101,10 @@ gate. Это выключенный experiment, не продуктовая за
 
 Следующий кандидат — upstream libghostty-vt, commit
 `08a9518340e19487bd5fdf96963583fb32f0c41f`. Его C API нестабилен; Windows/Linux
-terminal gates ещё не закрыты. Source-archive hash не проверен, поэтому запись
-находится в `candidates`, а не в `lockedArtifacts`.
+terminal gates ещё не закрыты. Исходники получены через Git по закреплённому
+commit, не через source archive. Windows ReleaseSafe SDK и C++ ABI baseline уже
+проверены; полный gate с renderer/input остаётся открыт. Запись пока находится
+в `candidates`, а не в `lockedArtifacts` готового runtime.
 
 Для этого spike QA проверил официальный Zig index и реально скачанный
 [Zig 0.17.0 Windows archive](https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip):
@@ -110,10 +112,12 @@ terminal gates ещё не закрыты. Source-archive hash не провер
 `b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428`.
 Установленный Zig сообщает 0.17.0. Это build tool, не runtime NordSSH.
 
-OpenSSL 3.5.9 LTS, libssh 0.12.2 и Argon2 tag 20190702 остаются предложениями:
-их source archives, hashes/signatures и интеграция пока не проверены. Не считать
-их locked только по номеру версии или Git tag. Bare `vcpkg install libssh` тоже
-не гарантирует нужный patched baseline; проверять конкретный port/overlay.
+OpenSSL 3.5.9 LTS, libssh 0.12.2 и Argon2 tag 20190702 теперь собраны и проверены
+ограниченными crypto/SSH fixtures. Hashes и границы проверки подписей записаны
+в dependency JSON и NATIVE_PROGRESS.md. Argon2 archive hash проверяет CMake;
+Linux engineering script также проверяет OpenSSL/libssh перед сборкой. Это ещё
+не весь release runtime/packaging gate. Bare `vcpkg install libssh` не гарантирует
+нужный patched baseline; проверять конкретный port/overlay.
 
 ## Лицензии и поставка
 

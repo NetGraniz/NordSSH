@@ -1,9 +1,9 @@
 name: Native core checks
 on:
   push:
-    paths: ['native/**', 'docs/NATIVE_*.md', '.github/workflows/native-checks.yml']
+    paths: ['native/**', '.github/workflows/native-checks.yml']
   pull_request:
-    paths: ['native/**', 'docs/NATIVE_*.md', '.github/workflows/native-checks.yml']
+    paths: ['native/**', '.github/workflows/native-checks.yml']
   workflow_dispatch:
 permissions:
   contents: read

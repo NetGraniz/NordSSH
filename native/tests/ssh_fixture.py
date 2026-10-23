@@ -72,6 +72,8 @@ async def main():
             raise AssertionError("SSH input bytes were duplicated or changed")
         if not dimensions or dimensions[0] != (80, 24):
             raise AssertionError("PTY dimensions not received")
+        if (100, 40) not in dimensions:
+            raise AssertionError("PTY resize was not delivered to the server")
         print("Loopback SSH trust/password/PTY/UTF8 fixture passed; not a complete client gate")
     finally:
         server.close()
