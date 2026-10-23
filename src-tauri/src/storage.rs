@@ -376,6 +376,21 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let old = dir.path().join("vault.dpapi");
         let mut v = Vault::default();
+        let key_path = dir.path().join("legacy-fixture-key");
+        std::fs::write(&key_path, b"synthetic-legacy-key-not-a-real-identity").unwrap();
+        let host_id = uuid::Uuid::new_v4().to_string();
+        v.hosts.push(crate::model::Host {
+            id: host_id.clone(),
+            name: "Legacy fixture".into(),
+            hostname: "fixture.invalid".into(),
+            port: 22,
+            username: "fixture".into(),
+            vault: "Test".into(),
+            auth: "key".into(),
+            key_path: key_path.to_string_lossy().into_owned(),
+            certificate_path: String::new(),
+            favorite: false,
+        });
         v.known_hosts
             .insert("[localhost]:22".into(), "SHA256:fixture".into());
         let ciphertext = crate::device::dpapi(&serde_json::to_vec(&v).unwrap(), false).unwrap();
@@ -386,6 +401,21 @@ mod tests {
         assert!(s.migration);
         s.initialize(PASSWORD, true).unwrap();
         assert_eq!(std::fs::read(&old).unwrap(), ciphertext);
+        assert_eq!(
+            s.vault.secrets[&host_id].private_key,
+            "synthetic-legacy-key-not-a-real-identity"
+        );
         assert!(Store::open_app(path, device, &old).unwrap().unlocked());
+        std::fs::remove_file(&key_path).unwrap();
+        let incomplete_path = dir.path().join("incomplete.nordvault");
+        let mut incomplete = Store::open_app(
+            incomplete_path.clone(),
+            dir.path().join("another-device"),
+            &old,
+        )
+        .unwrap();
+        assert!(incomplete.initialize(PASSWORD, false).is_err());
+        assert!(!incomplete_path.exists());
+        assert_eq!(std::fs::read(&old).unwrap(), ciphertext);
     }
 }

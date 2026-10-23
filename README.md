@@ -57,7 +57,9 @@ OS profile, outside the portable folder. Linux AppImage needs a compatible deskt
 and may need FUSE or extract-and-run mode. Portable does not mean every operating
 system library is bundled.
 
-The header checks public GitHub Releases. Automatic download/installation remains
+The header checks stable public GitHub Releases; it does not announce prereleases.
+Download this beta from the [Releases page](https://github.com/NetGraniz/NordSSH/releases).
+Automatic download/installation remains
 disabled until signed artifacts and the installer upgrade path are verified.
 No GitHub token is embedded in the client. Update checks can be disabled.
 

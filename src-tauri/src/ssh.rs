@@ -436,7 +436,30 @@ mod tests {
             private_key: String::new(),
             certificate: String::new(),
         };
-        assert!(open(key_host, wrong_phrase, store.clone()).await.is_err());
+        assert!(
+            open(key_host.clone(), wrong_phrase, store.clone())
+                .await
+                .is_err()
+        );
+        let embedded = Secret {
+            password: String::new(),
+            passphrase: "fixture-passphrase".into(),
+            private_key: std::fs::read_to_string(&key_path).unwrap(),
+            certificate: String::new(),
+        };
+        std::fs::remove_file(&key_path).unwrap();
+        let (portable_session, _, _) = open(key_host, embedded, store.clone()).await.unwrap();
+        portable_session
+            .handle
+            .lock()
+            .await
+            .disconnect(
+                russh::Disconnect::ByApplication,
+                "Embedded key fixture finished",
+                "en",
+            )
+            .await
+            .unwrap();
         store
             .lock()
             .unwrap()

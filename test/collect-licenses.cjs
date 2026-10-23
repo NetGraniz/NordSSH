@@ -47,7 +47,7 @@ const os = require("node:os");
     }
   }
   await copyNotices("vendor/glib-0.18.5", "glib-0.18.5-patched");
-  for (const name of ["@xterm/xterm", "@xterm/addon-fit"])
+  for (const name of ["@xterm/xterm", "@xterm/addon-fit", "@tauri-apps/api"])
     await copyNotices(path.join("node_modules", name), name.replace("/", "-"));
   await fs.writeFile(
     path.join(destination, "README.txt"),
