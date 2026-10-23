@@ -1,0 +1,32 @@
+[package]
+name = "nordssh"
+version = "0.1.0-dev.1"
+description = "NordSSH desktop client"
+authors = ["NetGraniz"]
+edition = "2024"
+
+[lib]
+name = "nordssh_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+russh = { version = "0.64", default-features = false, features = ["ring", "rsa"] }
+russh-sftp = "3"
+rfd = "0.17"
+uuid = { version = "1", features = ["v4", "serde"] }
+tempfile = "3"
+zeroize = { version = "1", features = ["derive"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+semver = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_System_Memory", "Win32_Foundation"] }

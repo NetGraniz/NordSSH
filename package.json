@@ -1,0 +1,28 @@
+{
+  "name": "nordssh",
+  "version": "0.1.0-dev.1",
+  "private": true,
+  "description": "Windows SSH and SFTP client with local vaults",
+  "author": "NetGraniz",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test:ui": "node test/ui.cjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
+    "playwright": "1.64.1",
+    "prettier": "3.9.10",
+    "ssh2": "1.17.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.5"
+  }
+}
