@@ -349,3 +349,31 @@ Final Windows combined rerun after outside-press, local-drag and callback/tab
 destruction regressions passed **9/9 in 11.82 s**. History, mouse and real SSH
 terminal tests each also passed five consecutive runs (repetition, not new
 coverage). Linux full upstream/SDK/ABI run 40037749689 is still pending.
+
+## Ninth checkpoint: bounded authenticated payload admission
+
+Added a dependency-free structural scanner for the native vault's already
+authenticated JSON. It implements the format's strict UTF-8/escape/integer
+grammar, rejects decoded duplicate keys at every depth, checks all seven root
+fields and object-only record arrays, and enforces resource limits during
+scanning rather than after DOM allocation. It retains bounded field names,
+not owned string values or an entire second plaintext/DOM. The RFC 8259 grammar
+was checked against the primary RFC.
+
+The API deliberately separates structural acceptance from complete record-schema
+acceptance. Only empty schema-1 vaults qualify at this stage. Nonempty records
+and settings are marked unreviewed; no host/credential/reference schema or disk
+persistence is implied. Crypto APIs still return authenticated bytes, not a
+trusted product model. No existing or synthetic vault file was written here.
+
+Tests cover every documented container/resource boundary, malformed encodings,
+surrogate pairs, decoded duplicates including escaped root names, unsupported
+versions/unknown fields, record-array types, truncations and byte mutations.
+An independent Python decoder cross-checks 500 bounded generated documents and
+10,000 deterministic mutations (649 admitted in the recorded run). This caught
+Windows test stdin's Ctrl+Z text-mode EOF; the test-only harness now reads binary.
+These are regression cases, not an exhaustive fuzz campaign/security audit.
+
+Windows MSVC Debug combined CTest passed **11/11 in 13.51 s** with the development
+SDK. Linux/sanitizer CI for this new scanner follows after push. SSH real hosts,
+user vaults/backups/signing keys and Minecraft were not accessed or changed.

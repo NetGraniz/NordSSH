@@ -7,7 +7,12 @@ is not used by these targets.
 Current product modules:
 
 - `nordssh_vault_format`: bounded UTF-8 password and binary-header admission,
-  exact AAD construction.
+  exact AAD construction, plus bounded authenticated JSON structural admission.
+  The scanner rejects decoded duplicate keys, invalid Unicode/grammar, unknown
+  root fields/types and the format's numeric/container/resource-limit violations
+  before a future DOM/model exists. Only the empty schema-1 document has a complete
+  record contract; nonempty records/settings are explicitly marked unreviewed.
+  This is not a saved-host model or permission to persist arbitrary records.
 - `nordssh_vault_crypto`: AES-256-GCM/Argon2id authenticated in-memory envelopes,
   cleansed move-only secrets, fresh-nonce saves and device-key opening. Optional
   `NORDSSH_BUILD_CRYPTO=ON` requires OpenSSL 3.5.9; Argon2 source is hash-pinned.
@@ -67,6 +72,13 @@ using the same SDK prefix and pinned Qt. When `NORDSSH_BUILD_SSH=ON` is also set
 `terminal_ssh` checks real SSH output, one UTF-8 paste, exact mouse bytes and resize using the isolated
 fixture. Tests inject a synthetic clipboard source and run Qt offscreen; they do
 not read/change the user's clipboard, layout, vault or saved connections.
+
+`payload_admission` exercises exact/over-limit bytes, strings, keys, arrays,
+objects, depth and node count, malformed UTF-8/escapes, duplicate names and root
+shape. With a test Python interpreter available, `payload_oracle` independently
+cross-checks 500 generated valid documents and 10,000 seeded mutations using
+Python's strict JSON decoder. Python is not a product dependency. The oracle is
+a bounded regression corpus, not exhaustive fuzzing or a persistence test.
 
 `terminal_history` additionally checks primary-history navigation, alternate-screen
 isolation, retaining the viewed history during new output, returning to output on
