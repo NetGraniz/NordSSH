@@ -21,6 +21,13 @@ Current product modules:
   `NORDSSH_BUILD_SSH=ON` fixture uses an ephemeral loopback AsyncSSH server, not a
   production host or local system sshd. Async connection orchestration, saved
   trust policy, keys/2FA, SFTP, jump hosts and forwarding are not implemented yet.
+- `nordssh_terminal`: optional pinned Ghostty adapter and raster `QWidget` with
+  cell-based Unicode/truecolor/SGR rendering, alternate-screen state, resize,
+  terminal-state-aware key encoding and a single paste route. No text widget,
+  HTML, URL launch or remote clipboard hooks. Its SSH test owns a real loopback
+  connection in a test-only worker; it does not implement the product connection
+  manager. Selection/search, mouse reporting, preedit, fullscreen programs and
+  desktop clipboard/layout gates remain open.
 
 Build the dependency-free core with CMake and a C++20 compiler:
 
@@ -52,3 +59,9 @@ The optional `NORDSSH_BUILD_VT_GATE=ON` uses a verified SDK prefix supplied as
 `NORDSSH_GHOSTTY_SDK`. It builds only our C++ ABI assertion executable; it is not
 the product renderer. The manual Native VT engineering workflow repeats the
 pinned upstream/SDK/ABI checks on Windows and Linux without publishing a release.
+
+`NORDSSH_BUILD_TERMINAL=ON` builds the raster adapter and `terminal_widget` test
+using the same SDK prefix and pinned Qt. When `NORDSSH_BUILD_SSH=ON` is also set,
+`terminal_ssh` checks real SSH output, one UTF-8 paste and resize using the isolated
+fixture. Tests inject a synthetic clipboard source and run Qt offscreen; they do
+not read/change the user's clipboard, layout, vault or saved connections.

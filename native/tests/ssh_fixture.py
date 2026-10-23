@@ -11,6 +11,7 @@ import asyncssh
 
 
 async def main():
+    terminal_gate = len(sys.argv) == 3 and sys.argv[2] == "--terminal"
     attempts = []
     received = bytearray()
     dimensions = []
@@ -29,6 +30,8 @@ async def main():
     async def shell(process):
         dimensions.append(process.get_terminal_size()[:2])
         process.stdout.write(b"fixture-ready\r\n")
+        if terminal_gate:
+            process.stdout.write(b"\x1b[?1049h\x1b[2J\x1b[Halternate-screen\x1b[?1049l")
         try:
             while True:
                 try:
@@ -52,8 +55,9 @@ async def main():
                                          server_host_keys=[key], process_factory=shell,
                                          encoding=None, login_timeout=10)
     try:
-        for mode, expected_auth in [("untrusted", 0), ("changed", 0),
-                                    ("replay", 0), ("wrong-password", 1), ("shell", 1)]:
+        modes = [("terminal", 1)] if terminal_gate else [
+            ("untrusted", 0), ("changed", 0), ("replay", 0), ("wrong-password", 1), ("shell", 1)]
+        for mode, expected_auth in modes:
             before = len(attempts)
             child = await asyncio.create_subprocess_exec(sys.argv[1], str(server.get_port()),
                                                         fingerprint, mode)
@@ -68,13 +72,14 @@ async def main():
                 raise AssertionError(f"Native SSH fixture failed: {mode}")
             if len(attempts) - before != expected_auth:
                 raise AssertionError(f"Unexpected authentication before approval: {mode}")
-        if bytes(received) != "once-привет\n".encode("utf-8"):
+        expected = "once-привет" if terminal_gate else "once-привет\n"
+        if bytes(received) != expected.encode("utf-8"):
             raise AssertionError("SSH input bytes were duplicated or changed")
         if not dimensions or dimensions[0] != (80, 24):
             raise AssertionError("PTY dimensions not received")
         if (100, 40) not in dimensions:
             raise AssertionError("PTY resize was not delivered to the server")
-        print("Loopback SSH trust/password/PTY/UTF8 fixture passed; not a complete client gate")
+        print("Loopback SSH/terminal fixture passed; not a complete client gate")
     finally:
         server.close()
         await server.wait_closed()

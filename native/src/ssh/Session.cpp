@@ -114,6 +114,9 @@ std::vector<std::byte> Session::read(int timeoutMilliseconds) {
     if(timeoutMilliseconds<0 || timeoutMilliseconds>1000) throw SessionError();
     std::vector<std::byte> result(65536);
     const auto count=ssh_channel_read_timeout(channel_,result.data(),65536,0,timeoutMilliseconds);
+    // libssh 0.12.2 documents SSH_AGAIN on timeout, even for this bounded
+    // blocking read. An idle shell is not a failed/disconnected session.
+    if(count==SSH_AGAIN) return {};
     if(count<0) { state_=State::Failed; throw SessionError(); }
     result.resize(static_cast<std::size_t>(count));
     return result;

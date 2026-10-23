@@ -164,3 +164,71 @@ whose terminal tests were still in progress at this checkpoint.
 
 Existing prototype vaults, backups, signing keys and production hosts were not
 read, changed or used as test data. No native release has been published.
+
+## Fifth checkpoint: Qt raster terminal and real SSH byte path
+
+Resumed after the separate NordQueueTab task. Verified clean canonical main,
+origin and a successful fast-forward pull. Added `native/src/terminal` using the
+same pinned Ghostty SDK. The engine remains a candidate under the full release
+gate; this is further engineering evidence, not a claim of complete approval.
+
+`TerminalModel` owns the engine/render iterators and copies visible cells into a
+bounded Qt frame. `TerminalWidget` paints those cells through QPainter's raster
+path. It is not QTextEdit, HTML or an ANSI-stripping approximation. Checks cover
+fragmented UTF-8, combining/wide cells, truecolor/SGR, alternate screen restore,
+normal/application cursor keys, Ctrl+C, Enter, Tab and grid resizing. The adapter
+uses the pinned engine's encoder, not a hardcoded set of escape strings.
+
+One PasteRouter serves the widget. Tests cover Ctrl+V, Windows RU virtual-key
+events, right click, Shift+Insert, cancelled multiline paste, bracketed paste and
+one IME commit. A confirmation uses the captured bytes, not a fresh clipboard
+read. A nested confirmation may destroy the tab safely. Remote clipboard and
+image/file/shared-memory hooks are disabled. The widget has no process/URL hooks.
+
+Engineering limits: 64 KiB per feed/paste, 512 columns by 256 rows, 4 MiB/10,000
+lines of approximate engine scrollback, 256 KiB accumulated reply bytes and 1 MiB
+visible UTF-8 cluster bytes per frame. Oversized clusters display a replacement
+character rather than forcing unbounded UI allocation. Reply overflow fails
+closed. The engine's history byte cap has page-granularity slack. A 20,000-line
+test measures resident engine pages below 12 MiB; it is not total process RSS or
+a hostile-input memory audit.
+
+The new `terminal_ssh` test runs a real libssh connection on a separate test-only
+worker, feeds SSH output to the actual QWidget, sends a synthetic user paste via
+Ctrl+V and resizes the PTY to 100x40. The independent AsyncSSH server verifies the
+exact received UTF-8 bytes with no extra Enter or duplicate. Trust is checked
+against the ephemeral fixture's known SHA256 before authentication; this test
+does not introduce a product auto-trust path. No real hosts or credentials used.
+
+This test exposed an idle-read bug: libssh's `ssh_channel_read_timeout()` returns
+`SSH_AGAIN` on timeout, which the previous transport treated as failure. Corrected
+that case and added an explicit idle-read regression before subsequent writes.
+The behavior was checked in the pinned upstream 0.12.2 `src/channels.c`; the web
+API documentation timed out during this run. Qt paint/event behavior and the
+pinned Ghostty API documentation/source were also checked.
+
+Windows MSVC Debug CTest completed **7/7 passed in 14.62 s**: `ghostty_abi`,
+`vault_crypto`, `ssh_transport`, `paste_router`, `terminal_widget`, `terminal_ssh`,
+`vault_format`. Tests use the installed development DLLs, not a clean-machine
+package. Qt uses `offscreen` and an injected synthetic paste source. A synthetic
+raster PNG is retained under the ignored build directory for visual inspection.
+An initial screenshot exposed missing offscreen fonts (all text was tofu).
+The Windows raster test now loads the machine's existing Consolas font into
+that test process and checks actual Latin/Cyrillic glyph availability. Font
+changes also recalculate the widget grid/size hint, fixing a stale-metrics case.
+The corrected screenshot was visually inspected: Latin/Cyrillic, combining
+accent, colors and decorations render. Its CJK character is still a missing-glyph
+box with this single test font; CJK font fallback/packaging is not closed. No
+Windows fonts were modified or copied into the repository/distribution.
+The SSH transport, widget and integrated SSH tests also passed five consecutive
+runs each before the font-test extension; this is repetition, not 15 distinct
+new acceptance scenarios. The unchanged dependency-free core still passes.
+The final combined rerun after the font/failure-path extensions passed **7/7 in
+15.70 s**. Only synthetic fixture material and source/docs are staged for Git.
+
+Still not passed: actual Windows RU/EN keyboard/clipboard, X11/Wayland, mouse,
+selection/search/scrollback UI, preedit display, cursor shape/blink, synchronized
+output, actual vim/nano/top/less/tmux, full parser/resource corpus and package
+acceptance. The test-only worker is not the cancellable product connection
+manager. Saved trust/authentication dialogs, vault persistence, SFTP, installers
+and signed bundle updates remain work ahead. No native user release was made.

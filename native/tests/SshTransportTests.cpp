@@ -49,9 +49,17 @@ int main(int argc,char** argv) {
                 client.authenticatePassword("synthetic-ssh-password");
                 client.openShell(80,24);
                 client.resize(100,40);
+                std::string output;
+                const auto readyDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+                while(output.find("fixture-ready")==std::string::npos && std::chrono::steady_clock::now()<readyDeadline) {
+                    const auto data=client.read(100);
+                    output.append(reinterpret_cast<const char*>(data.data()),data.size());
+                    require(output.size()<65536,"Unbounded fixture ready output");
+                }
+                require(output.find("fixture-ready")!=std::string::npos,"No initial shell output");
+                require(client.read(100).empty(),"Idle read must not fail or invent output");
                 const std::string payload="once-\xd0\xbf\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82\n";
                 client.write(std::as_bytes(std::span(payload)));
-                std::string output;
                 const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
                 while(output.find("echo:"+payload)==std::string::npos && std::chrono::steady_clock::now()<deadline) {
                     const auto data=client.read(100);
