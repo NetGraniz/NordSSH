@@ -1,6 +1,11 @@
 name: Release builds
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        default: both
+        options: [both, windows, linux]
 permissions:
   contents: read
 env:
@@ -10,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-22.04]
+        os: ${{ fromJSON(inputs.platform == 'linux' && '["ubuntu-22.04"]' || inputs.platform == 'windows' && '["windows-latest"]' || '["windows-latest","ubuntu-22.04"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 50
     steps:
@@ -21,7 +26,7 @@ jobs:
           cache: npm
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev xvfb xdotool
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev xvfb xdotool libfuse2 desktop-file-utils squashfs-tools
       - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - run: npm ci --ignore-scripts
       - run: npm run build
@@ -39,7 +44,7 @@ jobs:
         run: npm run tauri -- build --no-bundle
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
-        run: npm run tauri -- build --bundles appimage --config '{"bundle":{"active":true}}'
+        run: npm run tauri -- build --bundles appimage --config '{"bundle":{"active":true,"icon":["icons/128x128.png"]}}'
       - name: Package Windows portable
         if: runner.os == 'Windows'
         shell: pwsh

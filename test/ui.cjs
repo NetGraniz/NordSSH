@@ -4,23 +4,33 @@ const { spawn } = require("node:child_process");
 const { mkdir, readFile } = require("node:fs/promises");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const net = require("node:net");
 (async () => {
+  const reservation = net.createServer();
+  await new Promise((resolve) => reservation.listen(0, "127.0.0.1", resolve));
+  const port = reservation.address().port;
+  await new Promise((resolve) => reservation.close(resolve));
+  const origin = "http://127.0.0.1:" + port;
   const vite = spawn(
     process.execPath,
     [
       path.resolve("node_modules/vite/bin/vite.js"),
+      "preview",
       "--host",
       "127.0.0.1",
       "--port",
-      "1420",
+      String(port),
     ],
-    { stdio: "ignore", windowsHide: true },
+    {
+      stdio: "ignore",
+      windowsHide: true,
+    },
   );
   let browser;
   try {
     for (let i = 0; i < 100; i++) {
       try {
-        const r = await fetch("http://127.0.0.1:1420");
+        const r = await fetch(origin);
         if (r.ok) break;
       } catch {}
       await new Promise((r) => setTimeout(r, 100));
@@ -37,12 +47,25 @@ const path = require("node:path");
     });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route("http://127.0.0.1:1420/", async (route) => {
-      let html = await readFile("index.html", "utf8");
+    page.on("console", (message) => {
+      if (message.type() === "error") console.error("Browser:", message.text());
+    });
+    await page.route(origin + "/mock-api.js", async (route) =>
+      route.fulfill({
+        contentType: "application/javascript",
+        body: await readFile("node_modules/@tauri-apps/api/mocks.js", "utf8"),
+      }),
+    );
+    await page.route(origin + "/", async (route) => {
+      let html = await readFile("dist/index.html", "utf8");
+      const script = html.match(
+        /<script type="module"[^>]*src="([^"]+)"[^>]*><\/script>/u,
+      );
+      assert.ok(script, "Build the frontend before running the UI fixture");
       html = html.replace(
-        '<script type="module" src="/src/main.ts"></script>',
+        script[0],
         `<script type="module">
-      import {mockIPC} from '/node_modules/@tauri-apps/api/mocks.js';
+      import {mockIPC} from '/mock-api.js';
       const state={hosts:[],settings:{theme:'nord',fontSize:14,checkUpdates:false},snippets:[],version:'UI test'};
       const vault={initialized:!window.__NEW_TEST_VAULT,unlocked:!window.__NEW_TEST_VAULT,migration:false,path:'fixture.nordvault',portable:true};
       mockIPC((command,args)=>{
@@ -56,17 +79,23 @@ const path = require("node:path");
         if(command==='check_updates')return {status:'no-release',version:''};
         throw new Error('Unexpected mock command '+command);
       });
-      await import('/src/main.ts');</script>`,
+      await import('${script[1]}');</script>`,
       );
       await route.fulfill({ contentType: "text/html", body: html });
     });
     page.setDefaultTimeout(15000);
     console.log("UI fixture: browser ready");
-    await page.goto("http://127.0.0.1:1420", {
+    await page.goto(origin, {
       waitUntil: "domcontentloaded",
       timeout: 20000,
     });
-    await page.getByText("Локально · 0 подключений", { exact: true }).waitFor();
+    await page
+      .getByText("Локально · 0 подключений", { exact: true })
+      .waitFor()
+      .catch(async (error) => {
+        console.error("UI state:", await page.locator("body").innerText());
+        throw error;
+      });
     await mkdir("test-results", { recursive: true });
     await page.screenshot({ path: "test-results/hosts-empty.png" });
     await page.locator("#add-host").click();
