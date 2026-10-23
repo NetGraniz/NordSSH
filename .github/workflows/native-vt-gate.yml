@@ -25,6 +25,9 @@ jobs:
           ref: 08a9518340e19487bd5fdf96963583fb32f0c41f
           path: vt-source
           persist-credentials: false
+      - name: Apply reviewed fix to exact pinned source
+        shell: pwsh
+        run: ./native/scripts/patch-ghostty.ps1 -Source vt-source
       - name: Install hash-verified Zig build tool
         id: sdk
         shell: pwsh

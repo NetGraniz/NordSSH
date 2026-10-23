@@ -1,0 +1,62 @@
+diff --git a/src/lib/tinyio/posix.zig b/src/lib/tinyio/posix.zig
+--- a/src/lib/tinyio/posix.zig
++++ b/src/lib/tinyio/posix.zig
+@@ -328,8 +328,17 @@
+             const proc_path = std.mem.printSentinel(&procfs_buf, template, .{fd}, 0) catch unreachable;
++            // readlink silently truncates. Resolve into a bounded scratch buffer
++            // first so exact-fit caller buffers remain valid without returning
++            // a truncated canonical path. A full scratch buffer is ambiguous.
++            var resolved: [posix.PATH_MAX]u8 = undefined;
+             while (true) {
+-                const rc = posix.system.readlink(proc_path, out_buffer.ptr, out_buffer.len);
++                const rc = posix.system.readlink(proc_path, &resolved, resolved.len);
+                 switch (posix.errno(rc)) {
+-                    .SUCCESS => return @bitCast(rc),
++                    .SUCCESS => {
++                        const n: usize = @bitCast(rc);
++                        if (n == resolved.len or n > out_buffer.len) return error.NameTooLong;
++                        @memcpy(out_buffer[0..n], resolved[0..n]);
++                        return n;
++                    },
+                     .INTR => continue,
+                     .ACCES => return error.AccessDenied,
+diff --git a/src/lib/tinyio/test.zig b/src/lib/tinyio/test.zig
+--- a/src/lib/tinyio/test.zig
++++ b/src/lib/tinyio/test.zig
+@@ -656,6 +656,45 @@
+ }
+ 
++test "fileRealPath rejects truncation" {
++    if (builtin.target.os.tag != .linux) return error.SkipZigTest;
++    const tio: TinyIo = .init;
++    const test_io = tio.io();
++    const testing = std.testing;
++    var tmp_dir = testing.tmpDir(.{});
++    defer tmp_dir.cleanup();
++    try tmp_dir.dir.writeFile(testing.io, .{ .sub_path = "real.txt", .data = "x" });
++    const dir: Dir = .{ .handle = tmp_dir.dir.handle };
++    var file = try dir.openFile(test_io, "real.txt", .{});
++    defer file.close(test_io);
++    var full: [std.Io.Dir.max_path_bytes]u8 = undefined;
++    const n = try file.realPath(test_io, &full);
++    try testing.expect(n > 8);
++    var guarded = [_]u8{0xa5} ** std.Io.Dir.max_path_bytes;
++    try testing.expectError(error.NameTooLong, file.realPath(test_io, guarded[0..0]));
++    try testing.expectError(error.NameTooLong, file.realPath(test_io, guarded[0..8]));
++    try testing.expectError(error.NameTooLong, file.realPath(test_io, guarded[0 .. n - 1]));
++    for (guarded) |byte| try testing.expectEqual(@as(u8, 0xa5), byte);
++    try testing.expectEqual(n, try file.realPath(test_io, guarded[0..n]));
++    try testing.expectEqualStrings(full[0..n], guarded[0..n]);
++    try testing.expectEqual(@as(u8, 0xa5), guarded[n]);
++    // Non-cwd directory handles always use the fd fallback, even with libc.
++    @memset(&guarded, 0xa5);
++    try testing.expectError(error.NameTooLong, dir.realPathFile(test_io, "real.txt", guarded[0..8]));
++    for (guarded) |byte| try testing.expectEqual(@as(u8, 0xa5), byte);
++    try testing.expectEqual(n, try dir.realPathFile(test_io, "real.txt", guarded[0..n]));
++    try testing.expectEqualStrings(full[0..n], guarded[0..n]);
++    try testing.expectEqual(@as(u8, 0xa5), guarded[n]);
++}
++
+ test "deleteFile edge cases" {
+     if (comptime !supported) return error.SkipZigTest;
+     const tio: TinyIo = .init;

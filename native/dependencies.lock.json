@@ -100,6 +100,8 @@
       "repository": "https://github.com/ghostty-org/ghostty.git",
       "commit": "08a9518340e19487bd5fdf96963583fb32f0c41f",
       "sourceArchiveSha256": null,
+      "localPatch": "patches/ghostty-tinyio-readlink.patch",
+      "localPatchScope": "TinyIo fd real-path truncation check plus Linux regression; apply script enforces exact clean commit",
       "license": "MIT",
       "minimumZigVersion": "0.17.0",
       "status": "candidate commit pinned for feasibility only; C API unstable; source archive not hash-verified; terminal gates pending"

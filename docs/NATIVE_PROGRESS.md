@@ -284,3 +284,23 @@ local SDK runtime, not a clean-machine package or a Linux GUI run.
 After adding cancelled-paste/viewport and focus-change/key-release regressions,
 the final combined run also passed **8/8 in 11.70 s**. No existing vault, saved
 connection, signing key, user clipboard or production SSH host was used.
+
+## Seventh checkpoint: scheduled native continuation, 2026-10-24
+
+Verified main/origin and completed `git pull --ff-only` before changes. The
+automatic native checks for d2f76c1 passed on GitHub. Read the requirements and
+ADR again; the client is still an engineering implementation, not a user release.
+
+Added a repository-owned patch for the Linux TinyIo truncation failure. The
+patch script requires the exact pinned Ghostty commit and clean tracked files;
+it does not alter the original development SDK. A separate detached dependency
+worktree is used locally. The readlink semantics were checked against Linux
+man-pages; the POSIX site returned HTTP 403 during verification.
+
+The change reads into bounded scratch storage, fails before copying truncated
+paths, and retains exact-fit caller buffers. Linux regression checks zero,
+short, one-byte-short and exact-fit buffers, including non-cwd directory handles
+and untouched guard bytes. The existing upstream regression remains enabled.
+The manual cross-platform workflow now applies this patch before compilation.
+Linux validation of the fix is pending a new workflow run; no terminal or
+application gate is declared complete by the source change alone.
