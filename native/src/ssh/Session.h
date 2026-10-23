@@ -38,6 +38,11 @@ public:
     // This rechecks the actual connected key; no unbound bool "trusted" flag.
     void authorizeHost(const HostIdentity& approved);
     void authenticatePassword(std::string_view password);
+    // In-memory OpenSSH key only; no filename/agent/config or implicit prompts.
+    // See KeyMaterial.h for the initial bounded encrypted-key import scope.
+    // Optional OpenSSH user certificate, NOT a server-host CA trust policy.
+    void authenticatePrivateKey(std::string_view privateKey, std::string_view passphrase = {},
+                                std::string_view certificate = {});
     void openShell(int columns, int rows);
     void resize(int columns, int rows);
     void write(std::span<const std::byte> bytes);

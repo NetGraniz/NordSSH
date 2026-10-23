@@ -26,7 +26,7 @@ cmake -S "$task_root/libssh-0.12.2" -B "$task_root/libssh-build" \
 cmake --build "$task_root/libssh-build" --parallel 2
 cmake --install "$task_root/libssh-build"
 python3 -m venv "$task_root/test-python"
-"$task_root/test-python/bin/python" -m pip install --disable-pip-version-check 'asyncssh==2.24.1'
+"$task_root/test-python/bin/python" -m pip install --disable-pip-version-check 'asyncssh==2.24.1' 'bcrypt==5.0.0'
 cmake -S native -B native/build-crypto-ci -DCMAKE_BUILD_TYPE=Debug \
   -DNORDSSH_BUILD_CRYPTO=ON -DOPENSSL_ROOT_DIR="$task_root/prefix" \
   -DNORDSSH_BUILD_SSH=ON -DCMAKE_PREFIX_PATH="$task_root/libssh-prefix" \

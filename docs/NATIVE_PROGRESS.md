@@ -377,3 +377,50 @@ These are regression cases, not an exhaustive fuzz campaign/security audit.
 Windows MSVC Debug combined CTest passed **11/11 in 13.51 s** with the development
 SDK. Linux/sanitizer CI for this new scanner follows after push. SSH real hosts,
 user vaults/backups/signing keys and Minecraft were not accessed or changed.
+
+The scanner's GitHub native checks passed on Windows and Ubuntu, including the
+Linux ASan/UBSan jobs: run 40038820149 at 52cc0c3. The patched Windows ReleaseSafe
+Ghostty SDK also built (45/45 steps); reconfigured the combined C++ build against
+that separate SDK and passed **11/11 in 13.86 s**. The original SDK/source remains
+unchanged. No WSL Linux distribution or Docker executable was available locally;
+Linux evidence comes from the disposable CI environment, not a local Linux GUI.
+
+## Tenth checkpoint: in-memory OpenSSH keys and user certificates
+
+Extended the single-owner transport with explicit private-key authentication
+after bound host approval. No key filename, agent, SSH config or implicit prompt
+is used. Temporary key/passphrase copies use cleansed move-only buffers; no
+credentials are passed through argv, logs or Qt signals. Source/API behavior was
+checked against pinned libssh 0.12.2 and the OpenSSH PROTOCOL.key specification.
+
+Before the private-key decoder/KDF, admit only one OpenSSH key: unencrypted or
+AES-256-CTR/bcrypt with 1..64 rounds, 16..64-byte salt and <=16 KiB private section.
+Validate fixed Ed25519/ECDSA public shapes and RSA 2048..8192-bit modulus with a
+bounded exponent. Bind the admitted public hash to the imported private key before
+signing. This prevents an attacker from hiding an unbounded KDF cost behind a
+small file. It is an initial supported subset, not universal PEM/PKCS8/PPK/cipher
+compatibility. The future connection manager still needs process-wide import
+scheduling/cancellation; the limit here is per operation, not a total CPU proof.
+
+Optional OpenSSH user certificates must match the private key. Certificate input
+is bounded at 64 KiB; raw public keys are not accepted as certificates. Modern
+public-key/signature algorithms are explicit; SHA1 ssh-rsa authentication is not
+enabled. Host certificates/host-CA trust and keyboard-interactive/2FA remain open.
+
+The isolated fixture verifies real shell echo using generated Ed25519, ECDSA and
+RSA keys, encrypted keys and matching user certificates. Negative cases include
+untrusted host, wrong passphrase, malformed/weak key, excessive/zero KDF rounds,
+embedded NUL, public/private mismatch, certificate/key mismatch and server-side
+expired/wrong-principal/unauthorized-key rejection. Synthetic material travels on
+binary stdin and is not persisted. Added the missing pinned bcrypt 5.0.0 wheel
+only to the isolated test environment/CI; it is not a product dependency.
+
+Windows combined CTest passed **12/12 in 28.82 s** before the last public-mismatch
+fixture and certificate-size tightening. Final combined rerun and Linux CI
+results follow below. No user-facing native build, installer or release exists.
+
+Final combined Windows rerun passed **12/12 in 28.76 s** against the patched
+ReleaseSafe VT SDK. The key fixture now contains 24 positive/negative cases,
+including all three ECDSA curves, encrypted RSA and a mismatched outer public
+section. Server counters assert zero authentication starts for local/trust/KDF
+rejection, and actual server-side authentication for remote rejection cases.

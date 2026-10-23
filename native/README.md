@@ -21,11 +21,17 @@ Current product modules:
 - `nordssh_input`: one paste event route for a future terminal widget. Tests send
   synthetic Qt events; they do not inspect the user's clipboard or prove actual
   keyboard-layout/IME behavior on a desktop session.
-- `nordssh_ssh`: worker-only password/PTY transport with explicit bound host-key
+- `nordssh_ssh`: worker-only password/OpenSSH-key/PTY transport with explicit bound host-key
   approval, disabled automatic SSH config and bounded reads. Its optional
   `NORDSSH_BUILD_SSH=ON` fixture uses an ephemeral loopback AsyncSSH server, not a
   production host or local system sshd. Async connection orchestration, saved
-  trust policy, keys/2FA, SFTP, jump hosts and forwarding are not implemented yet.
+  trust policy, keyboard-interactive/2FA, SFTP, jump hosts and forwarding are not implemented yet.
+  Private keys stay in memory: Ed25519, ECDSA P-256/384/521 and RSA-SHA2. Optional
+  matching OpenSSH user certificates are supported by the transport; this is not
+  a host-CA policy or a native authentication screen. The initial import scope is
+  OpenSSH only, unencrypted or AES-256-CTR/bcrypt with 1..64 rounds and a bounded
+  salt/private section. PEM/PKCS8/PPK and other ciphers need reviewed import-cost
+  policies. High-cost/unsupported inputs fail, never silently weaken/re-encrypt a key.
 - `nordssh_terminal`: optional pinned Ghostty adapter and raster `QWidget` with
   cell-based Unicode/truecolor/SGR rendering, alternate-screen state, resize,
   bounded engine scrollback with wheel/Shift+PageUp/PageDown/Home/End navigation,
@@ -79,6 +85,13 @@ shape. With a test Python interpreter available, `payload_oracle` independently
 cross-checks 500 generated valid documents and 10,000 seeded mutations using
 Python's strict JSON decoder. Python is not a product dependency. The oracle is
 a bounded regression corpus, not exhaustive fuzzing or a persistence test.
+
+`ssh_keys` uses ephemeral AsyncSSH keys and user certificates on loopback, with
+synthetic key material piped through binary stdin rather than argv or disk files.
+It checks encrypted/unencrypted keys, modern RSA signatures, matching certificates,
+wrong passphrases, trust-before-auth, KDF-cost bounds, key mismatch and server
+rejection of expired/wrong-principal certificates. Its optional `bcrypt==5.0.0`
+Python wheel is a test dependency only, not a shipped runtime/backend.
 
 `terminal_history` additionally checks primary-history navigation, alternate-screen
 isolation, retaining the viewed history during new output, returning to output on
