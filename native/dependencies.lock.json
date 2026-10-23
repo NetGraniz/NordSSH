@@ -111,14 +111,14 @@
       "sourceUrl": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
       "sourceArchiveSha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
       "license": "Apache-2.0",
-      "status": "source hash matches official checksum and release digest; detached signature mathematically verified against pinned primary-key fingerprint B146647E45A7B33947AB226B2A2C87D161692D40, not a full revocation/trust assessment; Windows in-memory crypto tests pass, complete installation/packaging pending"
+      "status": "source hash matches official checksum and release digest; detached signature mathematically verified against pinned primary-key fingerprint B146647E45A7B33947AB226B2A2C87D161692D40, not a full revocation/trust assessment; Windows build/install complete and crypto tests pass; packaging pending"
     },
     "libssh": {
       "version": "0.12.2",
       "sourceUrl": "https://www.libssh.org/files/0.12/libssh-0.12.2.tar.xz",
       "sourceArchiveSha256": "49560f677d96e3706a904ac2de1116e25f3680937d51e5c92198fcba4a1c1e9f",
       "licenseReview": "LGPL; verify exact SPDX expression from this version's COPYING before shipping",
-      "status": "source acquired; detached signature mathematically verified against pinned official fingerprint 88A228D89B07C2C77D0C780903D5DF8CFDD3E8E7, not a full revocation/trust assessment; build/integration pending"
+      "status": "source acquired; detached signature mathematically verified against pinned official fingerprint 88A228D89B07C2C77D0C780903D5DF8CFDD3E8E7, not a full revocation/trust assessment; Windows build/install and isolated password/PTY protocol fixture pass; complete client and packaging gates pending"
     },
     "argon2": {
       "version": "20190702",

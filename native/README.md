@@ -16,6 +16,11 @@ Current product modules:
 - `nordssh_input`: one paste event route for a future terminal widget. Tests send
   synthetic Qt events; they do not inspect the user's clipboard or prove actual
   keyboard-layout/IME behavior on a desktop session.
+- `nordssh_ssh`: worker-only password/PTY transport with explicit bound host-key
+  approval, disabled automatic SSH config and bounded reads. Its optional
+  `NORDSSH_BUILD_SSH=ON` fixture uses an ephemeral loopback AsyncSSH server, not a
+  production host or local system sshd. Async connection orchestration, saved
+  trust policy, keys/2FA, SFTP, jump hosts and forwarding are not implemented yet.
 
 Build the dependency-free core with CMake and a C++20 compiler:
 

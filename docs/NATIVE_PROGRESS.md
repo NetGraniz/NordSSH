@@ -1,7 +1,8 @@
 # Native implementation evidence
 
 Date: 2026-10-23. This is an engineering checkpoint, not a release announcement.
-The new client does not yet support real SSH/SFTP connections or on-disk vaults.
+The native transport now has isolated SSH password/PTY tests, but there is no
+user-facing SSH/SFTP application or on-disk vault service yet.
 The user is not asked to test intermediate harnesses or mock interfaces.
 
 ## Completed locally
@@ -86,6 +87,32 @@ These are in-memory cryptographic envelopes, not a complete vault service. Stric
 JSON/schema validation, disk transactions/ACLs/locking, cancellation, RNG/provider
 fault injection and device storage still require their own tests. Unauthenticated
 plaintext is kept private and cleansed on failure; no JSON is parsed by this layer.
+
+[Native CI run 39996541860](https://github.com/NetGraniz/NordSSH/actions/runs/39996541860)
+passed for commit `6d008bb`: Windows/Ubuntu structural core, core sanitizers and
+the new Ubuntu authenticated-crypto job. The latter built pinned OpenSSL/Argon2
+and ran the crypto tests under ASan/UBSan. This does not close persistence/UI gates.
+
+## Third checkpoint: isolated SSH transport
+
+Built libssh 0.12.2 against OpenSSL 3.5.9, with server, implicit command execution,
+GSSAPI, compression, packet capture and debug call tracing disabled. No system SSH
+service/account was created or changed. Added a blocking single-owner transport
+core intended for a worker thread, not the GUI or a finished ConnectionManager.
+
+Windows MSVC Debug `ssh_transport` passed (4.11 s) against a loopback-only AsyncSSH
+2.24.1 fixture with an ephemeral in-memory Ed25519 host key and synthetic password.
+Five modes checked: authentication refused before key approval; changed-key
+refusal; cross-connection approval replay refusal; wrong password; successful
+password/PTY/resize/UTF-8 roundtrip. The server independently counted password
+attempts and compared the exact received bytes to reject duplicates. This is not
+an OS clipboard/layout test. Public test fingerprints, not passwords, use argv.
+
+Host approvals bind endpoint/user, algorithm, SHA256 and a random connection ID,
+then recheck the actual connected key. The persistent known-host/challenge UI
+policy is not implemented by this transport and must not be bypassed when wiring
+the application. Blocking handshake/auth require the future worker cancellation
+and lifetime controller; current tests only establish isolated protocol behavior.
 
 ## Next exit criteria
 
