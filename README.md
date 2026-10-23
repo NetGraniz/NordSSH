@@ -1,5 +1,12 @@
 # NordSSH
 
+> Native rewrite in progress. The owner approved a fresh C++/Qt Widgets client
+> without a web runtime. The existing Tauri beta is a discontinued prototype,
+> not the new client. No native release is published yet. Requirements and
+> architecture are recorded in [NATIVE_REQUIREMENTS.md](docs/NATIVE_REQUIREMENTS.md)
+> and [ADR 0001](docs/adr/0001-native-client.md). The sections below describe the
+> prototype; they are not a completion report for the native rewrite.
+
 Local SSH and SFTP client for Windows and Linux. No cloud account, vault sync
 service or subscription. Version `0.1.0` adds installers and signed updates to
 the earlier portable beta.
