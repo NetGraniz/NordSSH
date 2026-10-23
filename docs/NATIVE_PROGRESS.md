@@ -33,8 +33,11 @@ ctest --test-dir native/build-vault -C Debug --output-on-failure
 
 Source was an uncommitted working tree at that run; see the enclosing Git commit
 for these sources. Raw local logs remain under the ignored build directory.
-GitHub native core/sanitizer jobs rerun the committed source independently; they
-do not include Qt input unless explicitly configured and do not close UI gates.
+GitHub native core/sanitizer jobs rerun the committed source independently.
+[Run 39957664492](https://github.com/NetGraniz/NordSSH/actions/runs/39957664492)
+passed all three jobs for commit `99f0ec689b057679a9711821ad5c1ead135026aa`:
+Windows core, Ubuntu 24.04 core and Ubuntu ASan/UBSan. They test vault structural
+admission, not Qt input, encryption, real SSH or complete application acceptance.
 
 ## Terminal decision
 
@@ -46,6 +49,10 @@ See NATIVE_TEST_MATRIX.md for scope and nonclaims.
 
 libghostty-vt is the next candidate, not an approved release dependency. Its
 Windows feasibility and bounded-memory behavior need their own recorded results.
+The official Zig 0.17.0 download was hash-verified; initial test attempts hit Zig
+TLS/cache acquisition problems, not failed executed VT assertions. A retry is
+being evaluated; neither its runtime test gate nor ReleaseSafe build is yet
+recorded as passed. Do not infer success from a running compiler.
 
 ## Next exit criteria
 
