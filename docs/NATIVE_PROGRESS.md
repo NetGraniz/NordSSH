@@ -450,3 +450,38 @@ including `<cstdint>`, accidentally relying on MSVC transitive includes. Added
 the explicit include and audited the adapter's integer/size includes as well.
 No ABI assertion was removed. Native core/crypto checks at 81b07ad passed in run
 40040998462; the next SDK/ABI-only run verifies this final integration fix.
+
+## Scheduled continuation handoff, 2026-10-24
+
+The full patched Windows job in 40037749689 passed: upstream 41/41 steps,
+6933 passes/70 skips across overlapping executables, ReleaseSafe SDK 45/45,
+and its then-current C++ ABI/structural tests 2/2. That full run remains red
+because its earlier Linux CMake configuration failed; it is not rewritten as a
+successful run. The Linux upstream suite itself passed as recorded above.
+
+After both integration fixes, the Linux job in SDK/ABI-only run 40041619320 at
+430ddfc passed: fresh ReleaseSafe SDK 45/45, C++ ABI/payload/format **4/4 in 0.96 s**.
+This closes the observed Linux truncation and C++ SDK integration failures at
+this pin. It does not close Linux Qt renderer/X11/Wayland/TUI acceptance. The
+latest automatic native-core/crypto checks also passed (40041618537).
+
+SDK/ABI-only run 40041619320 subsequently completed green on **both Windows and
+Linux**, with four engineering CTests on each. Full upstream tests were
+intentionally not repeated in that scoped run; their separate evidence is above.
+
+Final local combined Windows Debug tests passed **12/12 in 28.83 s**, using the
+patched separate SDK. User clipboard, real SSH hosts, existing vaults/backups,
+signing keys and Minecraft remain untouched. All implementation changes are on
+GitHub main; no native release, installer or user test invitation was published.
+
+Next engineering work:
+
+- Close terminal selection/copy/search, cursor/preedit/font-fallback and actual
+  desktop/fullscreen-program gates with pinned Linux Qt as well as Windows.
+- Review concrete host/group/credential/trust/snippet/settings record schemas;
+  then implement atomic/stale-write-safe VaultService. Structural JSON admission
+  alone must never authorize nonempty production records or a save.
+- Build the cancellable bounded ConnectionManager, native trust/authentication
+  UI and keyboard-interactive/2FA; add process-wide key-import scheduling.
+- Implement SFTP/forwarding, complete native UI, installers and signed full-bundle
+  updates/rollback, with separate acceptance evidence before inviting the user.
