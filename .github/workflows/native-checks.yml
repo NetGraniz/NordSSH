@@ -1,0 +1,33 @@
+name: Native core checks
+on:
+  push:
+    paths: ['native/**', 'docs/NATIVE_*.md', '.github/workflows/native-checks.yml']
+  pull_request:
+    paths: ['native/**', 'docs/NATIVE_*.md', '.github/workflows/native-checks.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Configure native C++ core (no web runtime)
+        run: cmake -S native -B native/build-ci -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build native/build-ci --config Debug --parallel 2
+      - name: Test structural admission (not full application acceptance)
+        run: ctest --test-dir native/build-ci -C Debug --output-on-failure
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: cmake -S native -B native/build-sanitized -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
+      - run: cmake --build native/build-sanitized --parallel 2
+      - run: ctest --test-dir native/build-sanitized --output-on-failure

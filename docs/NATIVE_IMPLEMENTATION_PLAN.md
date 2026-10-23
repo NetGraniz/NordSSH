@@ -9,9 +9,9 @@
 | --- | --- |
 | ТЗ и архитектура | Проверены руководителем, QA и security-критиком |
 | MIT собственного кода | Подтверждена владельцем |
-| Нативная реализация | Не написана |
-| Точная версия Qt/OpenSSL, dependency lock | Не утверждены |
-| Windows/Linux terminal gate | Не выполнен |
+| Нативная реализация | Начаты C++ core и Qt input router; приложения ещё нет |
+| Точная версия Qt/OpenSSL, dependency lock | Qt SDK проверен; crypto dependencies ещё кандидаты |
+| Windows/Linux terminal gate | libvterm baseline прошёл, security gate NO-GO; проверяется замена |
 | Нативные SSH/SFTP/vault tests | Не выполнены |
 | Нативные установщики и обновления | Не собраны, не проверены |
 | Новый нативный релиз | Не опубликован |

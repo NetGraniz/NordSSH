@@ -1,4 +1,4 @@
-name: Release builds
+name: Legacy web prototype builds (not native NordSSH)
 on:
   workflow_dispatch:
     inputs:

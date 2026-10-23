@@ -28,6 +28,7 @@ id_ed25519*
 /src-tauri/target/
 /src-tauri/gen/
 /test-results/
+/native/build*/
 /src-tauri/icons/android/
 /src-tauri/icons/ios/
 /src-tauri/icons/*.icns

@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Engineering acquisition pins, not a complete product dependency lock or release approval",
+  "recordedAt": "2026-10-23",
+  "enforcedByBuild": false,
+  "toolchain": {
+    "windows": {
+      "architecture": "x86_64",
+      "visualStudioBuildTools": "17.14.42",
+      "visualStudioInstallationVersion": "17.14.37806.7",
+      "msvcToolsetDirectoryVersion": "14.44.35207",
+      "msvcCompilerVersion": "19.44.35229.0",
+      "windowsSdkVersion": "10.0.26100.0",
+      "cmakeVersion": "4.4.4",
+      "ninjaPythonPackageVersion": "1.13.2",
+      "ninjaReportedVersion": "1.13.2.git.kitware.jobserver-pipe-1",
+      "status": "observed-local-engineering-toolchain; compiler installer artifacts are not hash-locked"
+    },
+    "acquisitionTools": {
+      "pythonVersion": "3.12.14",
+      "aqtinstallVersion": "3.3.0",
+      "py7zrVersion": "1.1.4",
+      "shippedWithProduct": false
+    },
+    "linux": {
+      "target": "Ubuntu 24.04 x86_64",
+      "status": "compiler, SDK archives and system ABI baseline not locked"
+    }
+  },
+  "lockedArtifacts": {
+    "qtWindowsSdk": {
+      "version": "6.12.0",
+      "packageVersion": "6.12.0-0-202609280346",
+      "architecture": "win64_msvc2022_64",
+      "modules": ["qtbase", "qttools", "qttranslations"],
+      "qtSvgInstalled": false,
+      "status": "installed; qmake, qtpaths6 and windeployqt version/relocation checked; application acceptance not implied",
+      "trust": {
+        "method": "HTTPS downloads from two separately hosted Qt mirrors; matching SHA256 for independently downloaded metadata and archives; each published SHA1 checked",
+        "sha256Origin": "locally computed first-acquisition pins; not upstream signed SHA256",
+        "limit": "Both mirrors can share upstream provenance. Matching hashes do not prove publisher authenticity or provide independent security audits.",
+        "beforeRelease": "Confirm upstream SHA256/signature using a trusted reachable acquisition environment and repeat dependency/security/license review"
+      },
+      "metadata": {
+        "sha256": "ba09f355a6e42e1373b939d26d7742df7348f298a465420083b3cfd28ed2914b",
+        "urls": [
+          "https://ftp.fau.de/qtproject/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/Updates.xml",
+          "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/Updates.xml"
+        ]
+      },
+      "archives": [
+        {
+          "module": "qtbase",
+          "file": "6.12.0-0-202609280346qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+          "bytes": 40184745,
+          "sha256": "219d1b86def3be418e31d704572bc4acc91b2ec373c65595c9fb12b42bf098dc",
+          "publishedSha1": "bf35f8916164c6f313af8347dd0e91efe18178f0",
+          "urls": [
+            "https://ftp.fau.de/qtproject/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64/6.12.0-0-202609280346qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+            "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64/6.12.0-0-202609280346qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+          ]
+        },
+        {
+          "module": "qttools",
+          "file": "6.12.0-0-202609280346qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+          "bytes": 27373417,
+          "sha256": "73328e361429378df518f391ebe4d82c51e833f4d5a951692768ab5a5a1d7da5",
+          "publishedSha1": "879b647b61a1da35d50132e3a51ec5895b03fb95",
+          "urls": [
+            "https://ftp.fau.de/qtproject/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64/6.12.0-0-202609280346qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+            "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64/6.12.0-0-202609280346qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+          ]
+        },
+        {
+          "module": "qttranslations",
+          "file": "6.12.0-0-202609280346qttranslations-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+          "bytes": 2014837,
+          "sha256": "328321e8879a3dc119775b4404d6e32ec2a361696e73f760540a732921507917",
+          "publishedSha1": "65b03166eff4d8cdbc431a9089255e95c7a91e3d",
+          "urls": [
+            "https://ftp.fau.de/qtproject/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64/6.12.0-0-202609280346qttranslations-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+            "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64/6.12.0-0-202609280346qttranslations-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+          ]
+        }
+      ]
+    },
+    "zigWindowsCompiler": {
+      "version": "0.17.0",
+      "architecture": "x86_64-windows",
+      "url": "https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip",
+      "bytes": 100268137,
+      "sha256": "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428",
+      "verification": "QA checked official Zig download index and actual archive download; installed executable reports 0.17.0",
+      "purpose": "libghostty-vt feasibility build tool, not a product runtime",
+      "shippedWithProduct": false
+    }
+  },
+  "candidates": {
+    "libghosttyVt": {
+      "repository": "https://github.com/ghostty-org/ghostty.git",
+      "commit": "08a9518340e19487bd5fdf96963583fb32f0c41f",
+      "sourceArchiveSha256": null,
+      "license": "MIT",
+      "minimumZigVersion": "0.17.0",
+      "status": "candidate commit pinned for feasibility only; C API unstable; source archive not hash-verified; terminal gates pending"
+    },
+    "openssl": {
+      "version": "3.5.9",
+      "tag": "openssl-3.5.9",
+      "tagCommit": "45e844fa2a14ec92d146bd8f5778ac130b6625fb",
+      "sourceUrl": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
+      "sourceArchiveSha256": null,
+      "license": "Apache-2.0",
+      "status": "candidate LTS version; archive hash/signature and build integration not verified"
+    },
+    "libssh": {
+      "version": "0.12.2",
+      "sourceUrl": "https://www.libssh.org/files/0.12/libssh-0.12.2.tar.xz",
+      "sourceArchiveSha256": null,
+      "licenseReview": "LGPL; verify exact SPDX expression from this version's COPYING before shipping",
+      "status": "candidate patched baseline; archive hash/signature and build integration not verified"
+    },
+    "argon2": {
+      "version": "20190702",
+      "repository": "https://github.com/P-H-C/phc-winner-argon2.git",
+      "tag": "20190702",
+      "tagCommit": "62358ba2123abd17fccf2a108a301d4b52c01a7c",
+      "sourceArchiveSha256": null,
+      "license": "Apache-2.0 OR CC0-1.0",
+      "status": "candidate upstream tag; archive hash and build integration not verified"
+    }
+  },
+  "rejectedExperiments": [
+    {
+      "name": "libvterm",
+      "version": "0.3.3",
+      "productDependency": false,
+      "license": "MIT",
+      "status": "rejected unmodified upstream parser: identified CSI bounds/numeric overflow and resource-exhaustion risks; never feed untrusted server output to this experiment"
+    }
+  ]
+}

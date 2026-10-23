@@ -1,5 +1,9 @@
-name: Windows checks
-on: [push, pull_request]
+name: Legacy web prototype checks
+on:
+  push:
+    paths: ['src/**', 'src-tauri/**', 'test/**', 'package*.json', '.github/workflows/ci.yml']
+  pull_request:
+    paths: ['src/**', 'src-tauri/**', 'test/**', 'package*.json', '.github/workflows/ci.yml']
 permissions:
   contents: read
 jobs:
