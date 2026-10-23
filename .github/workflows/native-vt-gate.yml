@@ -1,0 +1,63 @@
+name: Native VT engineering gate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-windows-msvc
+          - os: ubuntu-24.04
+            target: x86_64-linux-gnu
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ghostty-org/ghostty
+          ref: 08a9518340e19487bd5fdf96963583fb32f0c41f
+          path: vt-source
+          persist-credentials: false
+      - name: Install hash-verified Zig build tool
+        id: sdk
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($IsWindows) {
+            $taskName = 'zig-x86_64-windows-0.17.0'
+            $taskFile = "$taskName.zip"
+            $taskHash = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+          } else {
+            $taskName = 'zig-x86_64-linux-0.17.0'
+            $taskFile = "$taskName.tar.xz"
+            $taskHash = '1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026'
+          }
+          $taskArchive = Join-Path $env:RUNNER_TEMP $taskFile
+          $taskExtract = Join-Path $env:RUNNER_TEMP 'nordssh-zig'
+          Invoke-WebRequest "https://ziglang.org/download/0.17.0/$taskFile" -OutFile $taskArchive
+          if ((Get-FileHash $taskArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $taskHash) { throw 'Zig SHA256 mismatch' }
+          New-Item -ItemType Directory -Path $taskExtract | Out-Null
+          if ($IsWindows) { Expand-Archive -LiteralPath $taskArchive -DestinationPath $taskExtract }
+          else { tar -xf $taskArchive -C $taskExtract; if ($LASTEXITCODE -ne 0) { throw 'Zig extraction failed' } }
+          $taskBin = Join-Path $taskExtract $taskName
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $taskBin
+      - name: Upstream native terminal and C API tests
+        working-directory: vt-source
+        run: zig build test-lib-vt -Demit-lib-vt -Demit-themes=false -Dtarget=${{ matrix.target }} -Dsimd=false -j1 --summary all
+      - name: ReleaseSafe SDK
+        if: ${{ always() && steps.sdk.outcome == 'success' }}
+        working-directory: vt-source
+        run: zig build -Demit-lib-vt -Demit-themes=false -Dtarget=${{ matrix.target }} -Doptimize=ReleaseSafe -Dsimd=false -j1 --summary all
+      - name: C++ ABI and bounded engineering baseline
+        if: ${{ success() }}
+        run: |
+          cmake -S native -B native/build-vt-ci -DCMAKE_BUILD_TYPE=Debug -DNORDSSH_BUILD_VT_GATE=ON -DNORDSSH_GHOSTTY_SDK="${{ github.workspace }}/vt-source/zig-out"
+          cmake --build native/build-vt-ci --config Debug --parallel 2
+          ctest --test-dir native/build-vt-ci -C Debug --output-on-failure

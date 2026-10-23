@@ -90,9 +90,10 @@ OpenSSH user certificate и server host certificate — разные механ�
 libghostty-vt; его нестабильный C API изолируется адаптером. Это ещё не выбор
 прошедшего все gates движка. Полный акт — в NATIVE_TEST_MATRIX.md.
 
-Основной кандидат: upstream libvterm + собственный QWidget/QPainter renderer.
-Это не окончательно подтверждённый Windows-компонент. Проверяем сборку,
-Unicode, VT semantics и security до переноса остальных экранов.
+Первым кандидатом был upstream libvterm с собственным QWidget/QPainter renderer.
+После NO-GO продукт не использует этот движок. Для libghostty-vt проверяются
+сборка, Unicode, VT semantics и security до переноса остальных экранов;
+результаты инженерных проб фиксируются в NATIVE_PROGRESS.md.
 
 Не использовать архивированный Neovim fork. LXQt QTermWidget не заявляет Windows
 и не является готовой заменой для этой задачи. libghostty-vt возможен как

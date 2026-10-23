@@ -114,6 +114,27 @@ policy is not implemented by this transport and must not be bypassed when wiring
 the application. Blocking handshake/auth require the future worker cancellation
 and lifetime controller; current tests only establish isolated protocol behavior.
 
+## Fourth checkpoint: VT native ABI baseline
+
+Pinned Ghostty commit `08a9518340e19487bd5fdf96963583fb32f0c41f`, Zig 0.17.0,
+MSVC target and `simd=false`: ReleaseSafe SDK completed, **45/45 build steps**.
+The independently run upstream core test executable completed with **3220 passed,
+35 skipped, 2 failed**. Both failures report `PermissionDenied` while creating
+filesystem symlinks in `lib.tinyio` tests. Windows security policy was not changed.
+This is a partial result, not a passing full upstream gate. An earlier protocol
+run was interrupted for diagnosis; its exit-255 report is not an engine crash.
+
+Our `ghostty_abi` C++/MSVC static-link test passed (0.03 s): fragmented UTF-8,
+combining/wide text, alternate screen restore, resize, disabled clipboard hooks,
+10,000 output lines under configured history bounds and a limited page-resident
+memory check. Its formatter is only a test assertion helper, not a renderer or
+text-box substitute. This does not close visual rendering, actual clipboard,
+full memory/RSS, mouse/key encoding or fullscreen-program gates.
+
+The manual `native-vt-gate.yml` repeats upstream tests and SDK/C++ ABI checks on
+Windows and Ubuntu with pinned source and hash-verified Zig downloads. Results
+must be read before marking either platform passed. No app release is generated.
+
 ## Next exit criteria
 
 1. A safe pinned VT engine plus Qt raster renderer, real loopback SSH terminal,

@@ -47,3 +47,8 @@ product terminal and cannot satisfy a release gate.
 The next engine candidate is pinned libghostty-vt with a small C++ adapter. Its
 C API is explicitly unstable. Successful upstream CI or a local static-library
 build will not by itself close our renderer, keyboard, memory or SSH gates.
+
+The optional `NORDSSH_BUILD_VT_GATE=ON` uses a verified SDK prefix supplied as
+`NORDSSH_GHOSTTY_SDK`. It builds only our C++ ABI assertion executable; it is not
+the product renderer. The manual Native VT engineering workflow repeats the
+pinned upstream/SDK/ABI checks on Windows and Linux without publishing a release.
