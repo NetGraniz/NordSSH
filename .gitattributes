@@ -1,0 +1,3 @@
+# Signature fixtures must remain byte-identical on Windows and Linux.
+test/fixtures/update-test.txt -text
+*.sh text eol=lf
