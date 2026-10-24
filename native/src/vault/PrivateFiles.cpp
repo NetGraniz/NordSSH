@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QSaveFile>
 #include <QRegularExpression>
+#include <source_location>
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -17,7 +18,7 @@
 
 namespace nordssh::vault {
 namespace {
-[[noreturn]] void fail() { throw FileError(); }
+[[noreturn]] void fail(std::source_location at = std::source_location::current()) { throw FileError(at.line()); }
 void noLinks(const QString& path) {
     auto current = QFileInfo(path).absoluteFilePath();
     for (;;) {
@@ -97,6 +98,14 @@ void verifyPrivate(const QString& path, bool directory) {
 }
 #endif
 }
+void rejectLocalLinks(const QString& path) { noLinks(path); }
+void protectLocalHandle(qintptr descriptorFd) {
+#ifdef _WIN32
+    Security().protect(descriptorFd);
+#else
+    if (fchmod(static_cast<int>(descriptorFd), 0600)) fail();
+#endif
+}
 PrivateFiles::PrivateFiles(QString directory) : directory_(QFileInfo(directory).absoluteFilePath()) {
     const auto parent = QFileInfo(directory_).dir().absolutePath();
     noLinks(parent);
@@ -146,6 +155,9 @@ void PrivateFiles::write(const QString& name, std::span<const std::byte> data, c
     Security().protect(file.handle());
 #else
     if (fchmod(static_cast<int>(file.handle()), 0600)) fail();
+    // Qt 6.12 applies finalPermissions during commit, after a native fchmod.
+    // Set the final policy too; protecting only the temporary inode is not enough.
+    if (!file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)) fail();
 #endif
     if (file.write(reinterpret_cast<const char*>(data.data()), static_cast<qint64>(data.size())) != static_cast<qint64>(data.size())) fail();
     if (beforeCommit) beforeCommit();

@@ -23,10 +23,12 @@ def main():
             daemon.stdin.write(b"synthetic-test-keyring-password\n")
             daemon.stdin.close()
             for _ in range(100):
-                result = subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.secrets",
-                    "--object-path", "/org/freedesktop/secrets", "--method", "org.freedesktop.DBus.Introspectable.Introspect"],
-                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
-                if result.returncode == 0:
+                # NameHasOwner does not auto-activate a service using the bus
+                # launcher's inherited (non-test) HOME/keyring environment.
+                result = subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus",
+                    "--object-path", "/org/freedesktop/DBus", "--method", "org.freedesktop.DBus.NameHasOwner", "org.freedesktop.secrets"],
+                    env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=2)
+                if result.returncode == 0 and b"true" in result.stdout:
                     break
                 if daemon.poll() is not None:
                     raise RuntimeError("Isolated keyring stopped")

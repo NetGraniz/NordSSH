@@ -864,3 +864,11 @@ The complete Windows regression and Linux CI results will be recorded after run.
 Stage 2 is NOT complete: SFTP/TransferManager, forwarding/jump hosts and isolated
 OpenSSH acceptance remain. New vault/2FA APIs are not yet product UI flows.
 No native release/installer, real host access or user data migration occurred.
+
+Windows full Release regression at 5958295 passed **26/26 in 126.83 s**.
+Linux run 40103609333 compiled the new modules but exposed a final-permission
+failure in persistence/device tests. Upstream Qt 6.12.0 qsavefile.cpp confirms
+commit applies finalPermissions after native fchmod: protect the temporary inode
+AND set QSaveFile's final owner-only policy. The first run is failed, not accepted.
+The private-keyring readiness test now uses D-Bus NameHasOwner without auto-start,
+so it cannot launch a keyring daemon using the bus's inherited non-test HOME.

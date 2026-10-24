@@ -6,8 +6,12 @@
 #include <vector>
 
 namespace nordssh::vault {
+// Shared by local transfer staging. Verify every existing ancestor; handles are
+// protected before any secret/file content is written to a temporary file.
+void rejectLocalLinks(const QString& path);
+void protectLocalHandle(qintptr descriptorFd);
 class FileError final : public std::runtime_error {
-public: FileError() : std::runtime_error("Private vault file operation failed") {}
+public: explicit FileError(unsigned check = 0) : std::runtime_error("Private vault file operation failed (check " + std::to_string(check) + ")") {}
 };
 // One private directory, created directly below an existing parent. No traversal,
 // junctions or symlinks. Callers supply opaque generated basenames, not paths.
