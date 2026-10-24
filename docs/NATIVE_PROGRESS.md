@@ -812,3 +812,27 @@ after the push. This increment does not read production hosts, Minecraft data,
 prototype vaults, backups or signing keys. No installer/native user release was
 published: vault persistence/trust UI, keyboard-interactive/2FA, keepalive,
 forwarding/jump hosts, SFTP, snippets and verified distribution remain required.
+
+Final evidence at **96a00706df2a03fc5145ac82a794fbf6b947ee30**:
+
+- Windows Release complete local CTest: **23/23 in 104.96 s**, including
+  17 async manager modes and four actual native session-pane modes. Both Debug
+  and Release engineering EXEs built. Direct PE imports were inspected: Qt
+  Core/Gui/Widgets/Network, libssh, OpenSSL and system/VC runtimes; no direct
+  WebView dependency. This is not a full clean-bundle dependency audit.
+- Native core checks **40097971689**, all jobs green: structural Windows/Linux
+  3/3 each, structural Linux ASan/UBSan 3/3, pinned crypto/SSH sanitizer 11/11
+  in 39.49 s.
+- Native Linux terminal engineering **40097972087**, green: standalone Qt/VT/DNS
+  CTest 13/13 in 2.76 s, real TUI xcb/Wayland and isolated X11 input/clipboard
+  steps, then the new full Qt/SSH/session-UI ASan/UBSan build **22/22 in 34.59 s**.
+  That final run includes connection_manager (3.20 s) and connection_pane (1.08 s).
+  It excludes the separately executed ABI/TUI driver gates, explaining the count
+  difference from the combined local build. No sanitizer suppression was added.
+
+Next: finish keyboard-interactive/2FA and keepalive/controller credential UI,
+then the reviewed nonempty vault schema and atomic file service, persistent
+hosts/trust/settings, SFTP/snippets and packaging/update gates. The current native
+engineering UI is usable on its development runtime, not a redistributable
+installer/portable release. Do not ask the owner to test a standalone EXE without
+its dependency bundle or present these component results as full product acceptance.

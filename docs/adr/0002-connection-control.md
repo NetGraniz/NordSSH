@@ -62,7 +62,9 @@ The synchronous Session API must never be called directly from a GUI handler.
 
 ByteQueue admits at most 1 MiB, 128 chunks, and 64 KiB per chunk. Both byte and
 node limits matter: one-byte messages cannot allocate an unbounded list. Push
-rejects the whole chunk before allocation when full; no truncated paste is sent.
+rejects the whole chunk before allocation when full; queue overflow does not
+enqueue a prefix. This is admission atomicity, not transactional network delivery:
+an SSH disconnect can still interrupt data already being transmitted.
 Queued bytes use move-only cleansed storage. Close permanently rejects new input
 and discards pending chunks. A consumer can additionally own one popped 64 KiB
 chunk; the pump has one reusable 64 KiB scratch buffer. These are application
