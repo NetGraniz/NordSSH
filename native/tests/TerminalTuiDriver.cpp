@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
                 const auto hint = widget.sizeHint(); widget.resize(int(columns) * hint.width() / 80, int(rows) * hint.height() / 24);
                 app.processEvents(); break;
             }
-            case 'C': {
+            case 'C': case 'D': {
                 QString text; const auto frame = widget.snapshot();
                 for (int y = 0; y < frame.rows; ++y) {
                     for (int x = 0; x < frame.columns; ++x) text += frame.cells[y * frame.columns + x].text;
@@ -101,7 +101,9 @@ int main(int argc, char** argv) {
                 }
                 // Force the real raster paint path, not just the parser model.
                 QImage image(widget.size(), QImage::Format_ARGB32_Premultiplied); widget.render(&image);
-                reply('C', text.contains(QString::fromUtf8(body)) ? "1" : "0"); continue;
+                if (header[0] == 'D') reply('D', text.toUtf8().left(8192));
+                else reply('C', text.contains(QString::fromUtf8(body)) ? "1" : "0");
+                continue;
             }
             case 'P': reply('P', QApplication::platformName().toUtf8()); continue;
             default: throw std::runtime_error("Unknown TUI driver request");

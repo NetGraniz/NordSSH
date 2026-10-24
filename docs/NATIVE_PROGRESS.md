@@ -622,3 +622,11 @@ Ctrl+V, Ctrl+Shift+V, Shift+Insert, Ctrl+C and Ctrl+Shift+C copy. Real clipboard
 access in the test driver requires an explicit isolated-desktop environment flag;
 the fixture is not run against the user's display or clipboard. These tests are
 new and must run before any claim of successful native EN/RU input acceptance.
+
+Linux follow-up 40075413234 at e09986d passed all 12 offscreen CTests, including
+all five real TUI programs. The xcb/Wayland runs each passed vim/nano/less/top,
+then the tmux scenario failed waiting for a reused shell prompt after creating
+a window. The fixture now supplies an explicit temporary tmux default shell/
+command with a unique new-window marker, rather than relying on inherited PS1.
+Timeouts include a bounded synthetic screen dump for diagnosis. These runs are
+still recorded as failed; the next attempt must verify the revised fixture.

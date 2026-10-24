@@ -90,7 +90,8 @@ class Fixture:
             self.pump()
             if self.request(b"C", text.encode()) == b"1":
                 return
-        raise AssertionError(f"Visible terminal marker missing: {text!r}")
+        screen = self.request(b"D").decode("utf-8", errors="replace")
+        raise AssertionError(f"Visible terminal marker missing: {text!r}; synthetic screen:\n{screen[:2000]}")
 
     def text(self, text):
         data = self.request(b"T", text.encode())
@@ -171,7 +172,10 @@ def main():
             elif name == "top":
                 command = ["top", "-d", "1"]
             else:
-                command = ["tmux", "-L", "nordssh-fixture", "-f", "/dev/null", "new-session", "/bin/sh"]
+                config = root / "tmux-fixture.conf"
+                config.write_text('set -g default-shell /bin/sh\n'
+                                  'set -g default-command "echo TMUX-NEW-READY; exec /bin/sh"\n', encoding="utf-8")
+                command = ["tmux", "-L", "nordssh-fixture", "-f", str(config), "new-session", "/bin/sh"]
             fixture = Fixture(driver, command, root, args.qpa)
             try:
                 if name in ("vim", "nano"):
@@ -204,7 +208,7 @@ def main():
                 else:
                     fixture.expect("NORD-PTY>")
                     fixture.text("printf 'TMUX-FIRST\\n'"); fixture.key(KEY_ENTER); fixture.expect("TMUX-FIRST")
-                    fixture.key(ord("B"), CTRL); fixture.literal("c"); fixture.expect("NORD-PTY>")
+                    fixture.key(ord("B"), CTRL); fixture.literal("c"); fixture.expect("TMUX-NEW-READY")
                     fixture.text("printf 'TMUX-SECOND\\n'"); fixture.key(KEY_ENTER); fixture.expect("TMUX-SECOND")
                     fixture.resize(); fixture.key(ord("B"), CTRL); fixture.literal("p"); fixture.expect("TMUX-FIRST")
                     fixture.text("exit"); fixture.key(KEY_ENTER)
