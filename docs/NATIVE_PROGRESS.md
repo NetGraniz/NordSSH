@@ -749,3 +749,24 @@ candidate-cap regression. At 3311c35, Linux terminal workflow **40079321628**
 passed **13/13 in 2.59 s**, including actual Qt localhost resolution, and its
 real TUI xcb/Wayland and physical X11 EN/RU clipboard steps passed. Final Linux
 SSH sanitizer checks and the follow-up revision remain to be recorded.
+
+Final code revision **2c12268a711bdce463beed429e4e0e9874b820f0**:
+
+- Native core checks **40079517422**, all jobs green. Linux crypto/SSH
+  ASan/UBSan **11/11 in 38.42 s**, including byte queues, import permits and
+  the real duplex/cancellation fixture. Structural Windows/Linux and structural
+  Linux sanitizer tests passed 3/3 each.
+- Native Linux terminal engineering **40079518068**, green: Qt/VT/DNS/TUI
+  CTest **13/13 in 3.60 s**, actual TUI programs through xcb and Wayland, and
+  isolated physical X11 EN/RU clipboard/keyboard steps all passed.
+- Windows local combined regression **21/21 in 45.73 s**; the four new
+  components also passed three consecutive repeats after the candidate-cap test.
+
+Handoff: integrate these verified components with ConnectionAttempt into the
+actual async ConnectionManager. Next implement a bounded control/auth mailbox,
+coalesced resize, worker registry and asynchronous close/app shutdown; never
+join a live network/KDF worker in a tab's GUI destructor. Resolve and connect
+must share the same connect deadline. Consume host approval only through the
+existing one-shot lifecycle gate and Session::authorizeHost. Native trust/auth
+dialogs, retry/2FA/keepalive remain pending. No installer or native client release
+was published by this increment, and no user testing is requested yet.
