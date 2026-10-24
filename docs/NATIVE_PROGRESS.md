@@ -740,3 +740,12 @@ components, not a native client release: the async ConnectionManager, bounded
 control mailbox, safe app shutdown, native trust/auth dialogs, authentication
 retry/2FA and keepalive still need integration. Then continue the agreed vault,
 SFTP, application UI and distribution work without per-increment approval prompts.
+
+Follow-up review rotated stdout/stderr priority when only one output slot is
+available and capped DNS reply scanning at 32 candidates (with a regression test).
+The combined Windows run passed **21/21 in 45.73 s**; all four new component
+tests then passed three consecutive runs (**26.14 s** total), including the
+candidate-cap regression. At 3311c35, Linux terminal workflow **40079321628**
+passed **13/13 in 2.59 s**, including actual Qt localhost resolution, and its
+real TUI xcb/Wayland and physical X11 EN/RU clipboard steps passed. Final Linux
+SSH sanitizer checks and the follow-up revision remain to be recorded.

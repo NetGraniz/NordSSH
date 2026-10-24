@@ -17,7 +17,11 @@ ShellPump::Result ShellPump::step(std::stop_token stop) {
     // pumping while the UI queue is full, not merely copying stdout to the UI.
     if (!output_.roomForChunk()) return Result::Blocked;
     bool progress = false;
-    for (const bool standardError : {false, true}) {
+    // With only one free output slot, always starting at stdout can starve
+    // stderr indefinitely. Rotate priority independently of queue chunk sizes.
+    const bool first = stderrFirst_;
+    stderrFirst_ = !stderrFirst_;
+    for (const bool standardError : {first, !first}) {
         if (!output_.roomForChunk()) break;
         const auto count = session_.readSome(scratch_.bytes(), standardError, stop);
         if (count) {

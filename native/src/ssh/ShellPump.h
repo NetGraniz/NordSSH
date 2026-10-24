@@ -17,6 +17,7 @@ private:
     ByteQueue& output_;
     std::optional<vault::SecretBytes> pending_;
     std::size_t offset_ = 0;
+    bool stderrFirst_ = false;
     // Cleansed at worker teardown; reused rather than allocating for idle reads.
     vault::SecretBytes scratch_{ByteQueue::MaxChunk};
     std::thread::id owner_ = std::this_thread::get_id();

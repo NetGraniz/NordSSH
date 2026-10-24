@@ -108,6 +108,23 @@ int main(int argc, char** argv) {
         fake->reply(4, missing);
         await([&] { return results.size() == 8; });
         require(results.back().status == ResolutionStatus::NotFound, "DNS error not reported");
+        {
+            auto limitedState = std::make_shared<FakeState>();
+            HostResolver limited(std::make_unique<FakeBackend>(limitedState));
+            std::optional<Resolution> bounded;
+            require(limited.start(first, "bounded.example", HostResolver::Clock::now() + 1s,
+                [&](Resolution result) { bounded = std::move(result); }), "Bounded lookup start failed");
+            await([&] { return limitedState->calls.size() == 1; });
+            QList<QHostAddress> many;
+            for (int i = 0; i < 32; ++i) many.append(QHostAddress("fe80::1%eth0"));
+            many.append(QHostAddress("127.0.0.1"));
+            QHostInfo oversized;
+            oversized.setAddresses(many);
+            limitedState->reply(0, oversized);
+            await([&] { return bounded.has_value(); });
+            require(bounded->status == ResolutionStatus::NotFound && bounded->addresses.empty(),
+                "Resolver scanned beyond the candidate work cap");
+        }
         // Actual Qt async resolver uses localhost only, not public DNS/SSH.
         HostResolver actual;
         require(actual.start(second, "localhost", HostResolver::Clock::now() + 1s, callback), "Qt lookup failed");

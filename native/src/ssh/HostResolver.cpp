@@ -88,7 +88,9 @@ void HostResolver::begin(const std::shared_ptr<Ticket>& ticket) {
         if (Clock::now() >= ticket->deadline) { complete(ticket, ResolutionStatus::Timeout); return; }
         std::vector<std::string> addresses;
         if (info.error() == QHostInfo::NoError) {
+            std::size_t examined = 0;
             for (const auto& address : info.addresses()) {
+                if (++examined > 32) break;
                 if (!address.scopeId().isEmpty() ||
                     (address.protocol() != QAbstractSocket::IPv4Protocol && address.protocol() != QAbstractSocket::IPv6Protocol)) continue;
                 const auto text = address.toString().toStdString();

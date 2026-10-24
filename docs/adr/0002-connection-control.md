@@ -65,7 +65,8 @@ chunk; the pump has one reusable 64 KiB scratch buffer. These are application
 queue limits, not an absolute process-memory limit including libssh/Qt/OS buffers.
 
 ShellPump runs on the Session worker. One step attempts stdout and stderr reads
-of at most 64 KiB each, then one input write of at most 16 KiB. It does not loop
+of at most 64 KiB each, rotating stream priority so one free queue slot cannot
+indefinitely starve stderr, then one input write of at most 16 KiB. It does not loop
 waiting for a channel window. Before each write, a zero-time flush must clear
 previous pending socket output. A full GUI output queue stops all transport
 pumping, including flush/write calls which could otherwise receive more data
@@ -96,7 +97,7 @@ at 63 bytes, input at 253 bytes. Initial scope accepts ASCII/ACE hostnames,
 IPv4 and unscoped IPv6; raw Unicode, scoped addresses, URLs, userinfo, controls
 and malformed labels are rejected. Canonicalize before constructing the trust
 identity/ConnectionAttempt. Returned transport addresses are deduplicated,
-unscoped, and capped at eight. The DNS response's hostName never replaces the
+unscoped, and capped at eight, examining at most 32 candidates per reply. The DNS response's hostName never replaces the
 logical trust name. Address fallback/Happy Eyeballs and UI integration are pending.
 
 Reference: [Qt 6.12 QHostInfo](https://doc.qt.io/qt-6/qhostinfo.html), checked
