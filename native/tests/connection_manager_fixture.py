@@ -14,10 +14,33 @@ async def main():
     dimensions = []
     errors = []
     connections = set()
+    ignores = 0
 
     class Server(asyncssh.SSHServer):
         def connection_made(self, connection):
+            nonlocal ignores
             connections.add(connection)
+            # Pinned test-only protocol hook; never used by product code.
+            handlers = dict(connection._packet_handlers)
+            original = handlers[2]  # SSH_MSG_IGNORE
+            def record(*args):
+                nonlocal ignores
+                ignores += 1
+                return original(*args)
+            handlers[2] = record
+            connection._packet_handlers = handlers
+
+        def kbdint_auth_supported(self):
+            return mode.startswith("interactive")
+
+        def get_kbdint_challenge(self, username, lang, submethods):
+            attempts.append(username)
+            return ("Fixture 2FA", "Synthetic challenge", "", [("Code:", False)] * (9 if mode == "interactive-many" else 1))
+
+        def validate_kbdint_response(self, username, responses):
+            if responses == ["123456"]:
+                return ("Fixture 2FA", "Second round", "", [("Recovery:", True)])
+            return username == "fixture-user" and responses == ["654321"]
 
         def connection_lost(self, exc):
             pass
@@ -94,11 +117,13 @@ async def main():
     try:
         modes = ("ui-password", "ui-reject", "ui-changed", "ui-eof") if ui else (
             "capacity", "cancel-dns", "destroy-banner", "untrusted", "bad-challenge", "changed",
-            "destroy-trust", "trust-timeout", "wrong-password", "auth-timeout", "password", "cached", "key", "shutdown", "reconnect", "remote-eof", "flood-cancel")
+            "destroy-trust", "trust-timeout", "wrong-password", "auth-timeout", "password", "cached", "key", "shutdown", "reconnect", "remote-eof", "flood-cancel", "keepalive",
+            "interactive", "interactive-wrong", "interactive-many", "interactive-cancel")
         for mode in modes:
             received.clear()
             dimensions.clear()
             before = len(attempts)
+            ignores_before = ignores
             port = banner.sockets[0].getsockname()[1] if mode == "destroy-banner" else server.get_port()
             child = await asyncio.create_subprocess_exec(sys.argv[1], str(port), fingerprint, mode,
                 stdin=asyncio.subprocess.PIPE if mode == "key" else None)
@@ -118,12 +143,16 @@ async def main():
                     await child.wait()
             count = len(attempts) - before
             expected = 1 if mode in ("password", "cached", "wrong-password", "shutdown", "ui-password", "ui-eof", "key", "reconnect", "remote-eof", "flood-cancel") else 0
+            if mode == "keepalive" or mode.startswith("interactive"):
+                expected = 1
             if mode == "auth-timeout":
                 if count not in (0, 1):
                     raise AssertionError("Duplicated stalled authentication")
             elif count != expected:
                 raise AssertionError(f"Unexpected credential transmission: {mode}: {count}")
-            if mode in ("password", "cached", "shutdown", "ui-password", "ui-eof", "key", "reconnect", "remote-eof"):
+            if mode == "keepalive" and ignores - ignores_before < 1:
+                raise AssertionError("No encrypted keepalive packet received")
+            if mode in ("password", "cached", "shutdown", "ui-password", "ui-eof", "key", "reconnect", "remote-eof", "keepalive", "interactive"):
                 expected_input = "once-привет\r" if ui else "once-привет\n"
                 if bytes(received) != expected_input.encode():
                     raise AssertionError(f"Synthetic input differs: {bytes(received)!r}")

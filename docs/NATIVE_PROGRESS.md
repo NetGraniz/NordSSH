@@ -836,3 +836,31 @@ hosts/trust/settings, SFTP/snippets and packaging/update gates. The current nati
 engineering UI is usable on its development runtime, not a redistributable
 installer/portable release. Do not ask the owner to test a standalone EXE without
 its dependency bundle or present these component results as full product acceptance.
+
+## Stage 2 implementation in progress, 2026-10-24
+
+Implemented bounded multi-round keyboard-interactive/2FA controller mailboxes,
+one-shot challenge answers and cancellation. Keepalive is encrypted SSH_MSG_IGNORE
+transport activity, not a remote command or an acknowledged liveness probe.
+The isolated manager fixture now covers 22 modes (previously 17), including two
+interactive rounds, wrong answer, excessive prompts, cancellation and keepalive.
+The expanded Windows Release manager test passed in 69.95 seconds.
+
+Added typed nonempty vault records, exact credential endpoint binding, strict
+references/settings, worker-owned VaultService, independent encrypted files,
+lease-protected lock/switch/import, snapshot stale-write detection, cooperative
+file locking, private ACL/modes, QSaveFile atomic replacement, one encrypted
+predecessor and explicit encrypted export/full-replacement import. See ADR 0004.
+Windows persistence and actual DPAPI device tests passed (2/2 in 2.91 seconds).
+Initial persistence tests caught a WRITE_DAC/WRITE_OWNER issue on Qt's data-only
+temporary handle; reopening the same file object for metadata access fixed it
+without allowing a plaintext or direct-write fallback.
+
+Linux optional device keys use libsecret with a 30-second cancellable worker call;
+the new test provisions a private D-Bus session and disposable HOME/XDG keyring.
+Its actual Linux execution is pending CI, not inferred from Windows DPAPI.
+The complete Windows regression and Linux CI results will be recorded after run.
+
+Stage 2 is NOT complete: SFTP/TransferManager, forwarding/jump hosts and isolated
+OpenSSH acceptance remain. New vault/2FA APIs are not yet product UI flows.
+No native release/installer, real host access or user data migration occurred.

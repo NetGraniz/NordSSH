@@ -36,7 +36,7 @@ task_extra_cmake=()
 task_prefix_path="$task_root/libssh-prefix"
 if [[ -n "${NORDSSH_QT_PREFIX:-}" ]]; then
   task_prefix_path="$task_prefix_path;$NORDSSH_QT_PREFIX"
-  task_extra_cmake+=(-DNORDSSH_BUILD_RESOLVER=ON -DNORDSSH_BUILD_CONNECTIONS=ON)
+  task_extra_cmake+=(-DNORDSSH_BUILD_RESOLVER=ON -DNORDSSH_BUILD_CONNECTIONS=ON -DNORDSSH_BUILD_DATA=ON)
 fi
 if [[ -n "${NORDSSH_VT_PREFIX:-}" ]]; then
   test -n "${NORDSSH_QT_PREFIX:-}"

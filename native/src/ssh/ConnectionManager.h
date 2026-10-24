@@ -9,12 +9,17 @@ namespace nordssh::ssh {
 namespace detail { struct ConnectionState; }
 
 struct Credentials final {
-    enum class Kind { Password, PrivateKey };
+    enum class Kind { Password, PrivateKey, Interactive };
     Kind kind;
     vault::SecretBytes secret;
     vault::SecretBytes passphrase{0};
     std::string certificate;
     [[nodiscard]] bool valid() const;
+};
+struct AuthenticationPrompt {
+    AttemptId request, challenge;
+    InteractiveChallenge content;
+    ConnectionAttempt::Clock::time_point deadline;
 };
 struct ConnectionStatus {
     std::optional<AttemptId> request;
@@ -60,6 +65,9 @@ public:
     bool approve(AttemptId request, AttemptId challenge);
     bool reject(AttemptId request);
     bool authenticate(AttemptId request, Credentials credentials);
+    [[nodiscard]] std::optional<AuthenticationPrompt> authenticationPrompt();
+    bool answerAuthentication(AttemptId request, AttemptId challenge, Session::InteractiveAnswers answers);
+    bool setKeepAlive(std::chrono::seconds interval);
     bool cancel();
     bool send(std::span<const std::byte> bytes);
     bool resize(int columns, int rows);
@@ -80,5 +88,6 @@ private:
     int columns_ = 80, rows_ = 24;
     bool seenHost_ = false, seenAuth_ = false, approvalSent_ = false, authSent_ = false;
     bool reserved_ = false;
+    std::chrono::seconds keepAlive_{30};
 };
 } // namespace nordssh::ssh

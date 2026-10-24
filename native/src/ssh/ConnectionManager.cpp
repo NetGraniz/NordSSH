@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <utility>
+#include <openssl/rand.h>
 
 namespace nordssh::ssh {
 namespace detail {
@@ -20,6 +21,10 @@ struct ConnectionState {
     std::condition_variable_any wake;
     std::optional<HostIdentity> host, approval;
     std::optional<Credentials> credentials;
+    AttemptId request{};
+    std::optional<AuthenticationPrompt> interactive;
+    std::optional<Session::InteractiveAnswers> answers;
+    std::chrono::seconds keepAlive{30};
     std::optional<std::pair<int, int>> dimensions;
     ConnectionAttempt::Clock::time_point authenticationDeadline{};
     bool authenticated = false;
@@ -28,7 +33,7 @@ struct ConnectionState {
     void cancel() {
         stop.request_stop();
         input.close();
-        { std::lock_guard lock(mutex); credentials.reset(); approval.reset(); }
+        { std::lock_guard lock(mutex); credentials.reset(); approval.reset(); answers.reset(); interactive.reset(); }
         wake.notify_all();
     }
 };
@@ -94,7 +99,19 @@ void runConnection(const std::shared_ptr<detail::ConnectionState>& state) noexce
             const auto control = operation(state, deadline);
             if (credentials.kind == Credentials::Kind::Password)
                 session->authenticatePassword(text(credentials.secret), control);
-            else session->authenticatePrivateKey(text(credentials.secret), text(credentials.passphrase), credentials.certificate, control);
+            else if (credentials.kind == Credentials::Kind::PrivateKey)
+                session->authenticatePrivateKey(text(credentials.secret), text(credentials.passphrase), credentials.certificate, control);
+            else session->authenticateInteractive([&](const InteractiveChallenge& challenge) {
+                AuthenticationPrompt prompt{state->request, {}, challenge, deadline};
+                if (RAND_bytes(reinterpret_cast<unsigned char*>(prompt.challenge.data()), 16) != 1) throw SessionError();
+                std::unique_lock promptLock(state->mutex);
+                state->interactive = std::move(prompt);
+                if (!state->wake.wait_until(promptLock, state->stop.get_token(), deadline,
+                    [&] { return state->answers.has_value(); })) throw SessionError();
+                auto answers = std::move(*state->answers);
+                state->answers.reset(); state->interactive.reset();
+                return answers;
+            }, {state->stop.get_token(), deadline});
         } // All password/key material released before the shell loop.
         failure = AttemptReason::Network;
         std::pair<int, int> dimensions;
@@ -106,6 +123,7 @@ void runConnection(const std::shared_ptr<detail::ConnectionState>& state) noexce
         session->openShell(dimensions.first, dimensions.second, operation(state, Clock::now() + 5s));
         { std::lock_guard lock(state->mutex); state->authenticated = true; }
         ShellPump pump(*session, state->input, state->output);
+        auto lastKeepAlive = Clock::now();
         while (!state->stop.stop_requested()) {
             std::optional<std::pair<int, int>> resize;
             {
@@ -115,6 +133,12 @@ void runConnection(const std::shared_ptr<detail::ConnectionState>& state) noexce
             if (resize) session->resize(resize->first, resize->second, operation(state, Clock::now() + 2s));
             const auto result = pump.step(state->stop.get_token());
             if (result == ShellPump::Result::Closed) break;
+            std::chrono::seconds interval;
+            { std::lock_guard lock(state->mutex); interval = state->keepAlive; }
+            if (interval.count() > 0 && Clock::now() - lastKeepAlive >= interval && state->output.roomForChunk()) {
+                session->keepAlive(operation(state, Clock::now() + 2s));
+                lastKeepAlive = Clock::now();
+            }
             if (result != ShellPump::Result::Progress) {
                 std::unique_lock lock(state->mutex);
                 // GUI input/pop/resize/cancel wakes immediately; idle network
@@ -130,7 +154,7 @@ void runConnection(const std::shared_ptr<detail::ConnectionState>& state) noexce
     state->input.close();
     {
         std::lock_guard lock(state->mutex);
-        state->credentials.reset(); state->approval.reset();
+        state->credentials.reset(); state->approval.reset(); state->interactive.reset(); state->answers.reset();
         state->failure = failure;
     }
     state->finished.store(true, std::memory_order_release);
@@ -146,6 +170,7 @@ private:
 }
 bool Credentials::valid() const {
     const auto value = text(secret), phrase = text(passphrase);
+    if (kind == Kind::Interactive) return value.empty() && phrase.empty() && certificate.empty();
     if (value.empty() || value.find('\0') != std::string_view::npos || phrase.size() > 4096 ||
         phrase.find('\0') != std::string_view::npos || certificate.size() > 65536 || certificate.find('\0') != std::string::npos) return false;
     if (kind == Kind::Password) return value.size() <= 4096 && phrase.empty() && certificate.empty();
@@ -272,6 +297,7 @@ bool ConnectionManager::start(const Endpoint& endpoint, const std::optional<Trus
         }
         state_ = std::make_shared<detail::ConnectionState>();
         state_->endpoint = endpoint_; state_->addresses = std::move(result.addresses);
+        state_->request = id; state_->keepAlive = keepAlive_;
         state_->connectDeadline = attempt_->deadline(); state_->timeouts = timeouts_;
         state_->dimensions = {columns_, rows_};
         const bool launched = runtime_ && runtime_->launch(state_);
@@ -381,6 +407,31 @@ bool ConnectionManager::cancel() {
     reserved_ = false;
     stopWorker();
     return changed;
+}
+std::optional<AuthenticationPrompt> ConnectionManager::authenticationPrompt() {
+    owner(); poll();
+    if (!state_ || !attempt_ || attempt_->phase() != AttemptPhase::Authentication) return {};
+    std::lock_guard lock(state_->mutex);
+    if (state_->answers) return {};
+    return state_->interactive;
+}
+bool ConnectionManager::answerAuthentication(AttemptId request, AttemptId challenge, Session::InteractiveAnswers answers) {
+    owner(); poll();
+    if (!state_ || !attempt_ || request != attempt_->id() || attempt_->phase() != AttemptPhase::Authentication) return false;
+    std::lock_guard lock(state_->mutex);
+    if (!state_->interactive || state_->interactive->challenge != challenge || state_->answers ||
+        Clock::now() >= state_->interactive->deadline || state_->stop.stop_requested() ||
+        answers.size() != state_->interactive->content.questions.size()) return false;
+    for (const auto& answer : answers) if (answer.bytes().size() > 4096 ||
+        std::ranges::find(answer.bytes(), std::byte{0}) != answer.bytes().end()) return false;
+    state_->answers = std::move(answers); state_->wake.notify_all(); return true;
+}
+bool ConnectionManager::setKeepAlive(std::chrono::seconds interval) {
+    owner();
+    if (interval.count() < 0 || interval > std::chrono::hours(1)) return false;
+    keepAlive_ = interval;
+    if (state_) { std::lock_guard lock(state_->mutex); state_->keepAlive = interval; }
+    return true;
 }
 bool ConnectionManager::send(std::span<const std::byte> bytes) {
     owner();

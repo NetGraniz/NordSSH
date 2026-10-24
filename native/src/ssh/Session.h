@@ -12,6 +12,8 @@
 #include <chrono>
 #include <functional>
 #include <stop_token>
+#include <optional>
+#include "vault/VaultCrypto.h"
 
 namespace nordssh::ssh {
 struct Endpoint { std::string host; std::uint16_t port; std::string user; };
@@ -26,6 +28,8 @@ struct OperationControl {
     std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(5);
 };
+struct InteractiveQuestion { std::string text; bool echo = false; };
+struct InteractiveChallenge { std::string name, instruction; std::vector<InteractiveQuestion> questions; };
 class SessionError final : public std::runtime_error {
 public:
     SessionError() : std::runtime_error("SSH operation failed or is not permitted in the current state") {}
@@ -53,6 +57,12 @@ public:
     // Optional OpenSSH user certificate, NOT a server-host CA trust policy.
     void authenticatePrivateKey(std::string_view privateKey, std::string_view passphrase = {},
                                 std::string_view certificate = {}, OperationControl control = {});
+    using InteractiveAnswers = std::vector<vault::SecretBytes>;
+    using InteractiveResponder = std::function<InteractiveAnswers(const InteractiveChallenge&)>;
+    void authenticateInteractive(const InteractiveResponder& respond, OperationControl control = {});
+    // Encrypted SSH_MSG_IGNORE keeps the transport active; not an acknowledged
+    // liveness probe. It never sends a command to the remote shell.
+    void keepAlive(OperationControl control = {});
     void openShell(int columns, int rows, OperationControl control = {});
     void resize(int columns, int rows, OperationControl control = {});
     void write(std::span<const std::byte> bytes, OperationControl control = {});

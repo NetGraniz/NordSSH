@@ -126,19 +126,37 @@ int main(int argc, char** argv) {
                             require(!manager->approve(id, prompt->challenge), "Host approval replay accepted");
                         }
                     }
-                    if (mode == "password" || mode == "cached" || mode == "wrong-password" || mode == "auth-timeout" || mode == "shutdown" || mode == "key" || mode == "reconnect" || mode == "remote-eof" || mode == "flood-cancel") {
+                    if (mode == "password" || mode == "cached" || mode == "wrong-password" || mode == "auth-timeout" || mode == "shutdown" || mode == "key" || mode == "reconnect" || mode == "remote-eof" || mode == "flood-cancel" || mode == "keepalive" || mode.starts_with("interactive")) {
                         require(manager->resize(100, 40), "Pending resize not coalesced");
                         require(!manager->resize(0, 10), "Invalid resize admitted");
                         auto credentials = password(mode == "wrong-password" ? "wrong-synthetic-password" : "synthetic-ssh-password");
                         if (mode == "key") credentials = {Credentials::Kind::PrivateKey, readSyntheticFrame(65536),
                             secret("synthetic-key-passphrase"), {}};
+                        if (mode.starts_with("interactive")) credentials = {Credentials::Kind::Interactive,
+                            nordssh::vault::SecretBytes(0), nordssh::vault::SecretBytes(0), {}};
                         require(manager->authenticate(id, std::move(credentials)),
                             "Credentials not accepted after approval");
                         require(!manager->authenticate(id, password()), "Duplicate auth command admitted");
-                        if (mode == "auth-timeout" || mode == "wrong-password") {
+                        if (mode.starts_with("interactive") && mode != "interactive-many") {
+                            for (unsigned round = 0; round < (mode == "interactive" ? 2u : 1u); ++round) {
+                                await([&] { return manager->authenticationPrompt().has_value() || manager->status().settled; });
+                                const auto prompt = manager->authenticationPrompt();
+                                require(prompt && prompt->content.questions.size() == 1, "Missing bounded interactive prompt");
+                                auto stale = id; stale[0] ^= std::byte{1};
+                                Session::InteractiveAnswers wrong; wrong.push_back(secret("000000"));
+                                require(!manager->answerAuthentication(stale, prompt->challenge, std::move(wrong)), "Stale OTP request accepted");
+                                if (mode == "interactive-cancel") { manager->cancel(); break; }
+                                Session::InteractiveAnswers answers;
+                                answers.push_back(secret(mode == "interactive-wrong" ? "bad-code" : round ? "654321" : "123456"));
+                                require(manager->answerAuthentication(id, prompt->challenge, std::move(answers)), "OTP response not admitted");
+                                Session::InteractiveAnswers duplicate; duplicate.push_back(secret("000000"));
+                                require(!manager->answerAuthentication(id, prompt->challenge, std::move(duplicate)), "OTP response replay accepted");
+                            }
+                        }
+                        if (mode == "auth-timeout" || mode == "wrong-password" || mode == "interactive-wrong" || mode == "interactive-many" || mode == "interactive-cancel") {
                             const auto before = heartbeats;
                             await([&] { return manager->status().settled; });
-                            require(manager->status().phase == AttemptPhase::Failed, "Failed auth became active");
+                            require(manager->status().phase == (mode == "interactive-cancel" ? AttemptPhase::Closed : AttemptPhase::Failed), "Failed auth became active");
                             if (mode == "auth-timeout") require(manager->status().reason == AttemptReason::Timeout && heartbeats > before + 10,
                                 "Stalled auth froze GUI or ignored lifecycle timeout");
                         } else if (mode == "flood-cancel") {
@@ -163,6 +181,13 @@ int main(int argc, char** argv) {
                                 }
                             };
                             await([&] { drain(); return output.find("fixture-ready") != std::string::npos; });
+                            if (mode == "keepalive") {
+                                require(!manager->setKeepAlive(-1s) && !manager->setKeepAlive(3601s), "Unbounded keepalive interval accepted");
+                                require(manager->setKeepAlive(1s), "Keepalive setting failed");
+                                const auto ready = std::chrono::steady_clock::now();
+                                await([&] { return std::chrono::steady_clock::now() - ready >= 1200ms; });
+                                require(manager->setKeepAlive(0s), "Keepalive disabling failed");
+                            }
                             const std::string payload = "once-\xd0\xbf\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82\n";
                             std::vector<std::byte> tooLarge(ByteQueue::MaxChunk + 1);
                             require(!manager->send(tooLarge), "Oversized paste partially admitted");

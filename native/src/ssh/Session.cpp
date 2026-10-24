@@ -31,6 +31,63 @@ vault::SecretBytes terminatedSecret(std::string_view value, std::size_t maximum)
     return copy;
 }
 } // namespace
+namespace {
+std::string promptText(const char* text, std::size_t maximum) {
+    if (!text) return {};
+    std::size_t size = 0;
+    while (size <= maximum && text[size]) ++size;
+    if (size > maximum) throw SessionError();
+    const std::string result(text, size);
+    if (std::ranges::any_of(result, [](unsigned char c) { return (c < 0x20 && c != '\n' && c != '\t' && c != '\r') || c == 0x7f; }))
+        throw SessionError();
+    const auto utf8 = vault::validatePassword(result);
+    if (utf8 == vault::PasswordStatus::InvalidUtf8 || utf8 == vault::PasswordStatus::TooLong) throw SessionError();
+    return result;
+}
+}
+void Session::authenticateInteractive(const InteractiveResponder& respond, OperationControl control) {
+    require(State::Trusted);
+    if (!respond) throw SessionError();
+    try {
+        const auto now = std::chrono::steady_clock::now();
+        if (control.stop.stop_requested() || now >= control.deadline || control.deadline - now > std::chrono::minutes(5)) failed();
+        const auto wire = [&] { return OperationControl{control.stop,
+            (std::min)(control.deadline, std::chrono::steady_clock::now() + std::chrono::seconds(10))}; };
+        for (unsigned round = 0; round < 8; ++round) {
+            const auto result = retry([&] { return ssh_userauth_kbdint(session_, nullptr, nullptr); }, SSH_AUTH_AGAIN, wire());
+            if (result == SSH_AUTH_SUCCESS) { state_ = State::Authenticated; return; }
+            if (result != SSH_AUTH_INFO) failed();
+            const int count = ssh_userauth_kbdint_getnprompts(session_);
+            if (count < 0 || count > 8) failed();
+            InteractiveChallenge challenge{promptText(ssh_userauth_kbdint_getname(session_), 512),
+                promptText(ssh_userauth_kbdint_getinstruction(session_), 2048), {}};
+            for (int index = 0; index < count; ++index) {
+                char echo = 0;
+                const auto* question = ssh_userauth_kbdint_getprompt(session_, static_cast<unsigned>(index), &echo);
+                if (!question) failed();
+                challenge.questions.push_back({promptText(question, 512), echo != 0});
+            }
+            auto answers = respond(challenge);
+            checkpoint(wire());
+            if (answers.size() != challenge.questions.size()) failed();
+            for (std::size_t index = 0; index < answers.size(); ++index) {
+                const auto bytes = answers[index].bytes();
+                if (bytes.size() > 4096 || std::ranges::find(bytes, std::byte{0}) != bytes.end()) failed();
+                vault::SecretBytes terminated(bytes.size() + 1);
+                std::ranges::copy(bytes, terminated.bytes().begin());
+                checked(ssh_userauth_kbdint_setanswer(session_, static_cast<unsigned>(index),
+                    reinterpret_cast<const char*>(terminated.bytes().data())));
+            }
+        }
+        failed();
+    } catch (...) { state_ = State::Failed; throw; }
+}
+void Session::keepAlive(OperationControl control) {
+    require(State::Shell);
+    checkpoint(control);
+    checked(ssh_send_ignore(session_, "NordSSH"));
+    checked(retry([&] { return ssh_blocking_flush(session_, 0); }, SSH_AGAIN, control));
+}
 Session::Session() {
     static const bool initialized = [] { if (ssh_init()!=SSH_OK) throw SessionError(); return true; }();
     (void)initialized;
