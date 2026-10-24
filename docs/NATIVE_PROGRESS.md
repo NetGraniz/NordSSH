@@ -694,3 +694,11 @@ tests. Linux sanitizer/SSH validation follows the next push. See ADR 0002 for
 the contract and limits. A bounded async ConnectionManager, command/output
 queues, key-import scheduling, native trust/auth UI and 2FA are still required.
 This is not a native application release or a user-test invitation.
+
+At 959fcd8, GitHub native checks **40077875059** completed green: Windows/Linux
+structural tests 3/3 each, Linux structural ASan/UBSan 3/3, and Linux crypto/SSH
+ASan/UBSan **8/8 in 27.72 s**. The latter includes key/certificate, cancellation
+and lifecycle tests. The final local Windows combined run was **17/17 in 36.07 s**.
+Next connection work is the bounded async controller/queues, key-import admission,
+DNS and safe shutdown/native trust/auth integration. Continue those agreed
+tasks without asking the owner to approve every implementation increment.
