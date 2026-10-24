@@ -14,8 +14,13 @@ make -j2
 make install_sw
 popd
 ssh_archive="$task_root/libssh-0.12.2.tar.xz"
-curl --fail --location --proto '=https' --tlsv1.2 \
-  'https://www.libssh.org/files/0.12/libssh-0.12.2.tar.xz' --output "$ssh_archive"
+# The primary host has repeatedly refused CI connections. Alpine's distfiles
+# serves the exact same pinned upstream tarball; a hash mismatch still stops.
+if ! curl --fail --location --retry 2 --connect-timeout 15 --max-time 90 --proto '=https' --tlsv1.2 \
+  'https://www.libssh.org/files/0.12/libssh-0.12.2.tar.xz' --output "$ssh_archive"; then
+  curl --fail --location --retry 2 --connect-timeout 15 --max-time 90 --proto '=https' --tlsv1.2 \
+    'https://distfiles.alpinelinux.org/distfiles/v3.24/libssh-0.12.2.tar.xz' --output "$ssh_archive"
+fi
 printf '%s  %s\n' '49560f677d96e3706a904ac2de1116e25f3680937d51e5c92198fcba4a1c1e9f' "$ssh_archive" | sha256sum --check --status
 tar -xf "$ssh_archive" -C "$task_root"
 cmake -S "$task_root/libssh-0.12.2" -B "$task_root/libssh-build" \

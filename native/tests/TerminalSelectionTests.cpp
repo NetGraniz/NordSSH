@@ -3,6 +3,8 @@
 #include <QFocusEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QTimer>
+#include <QTest>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -32,6 +34,13 @@ int main(int argc, char** argv) {
         model.feed("hello world\r\nsecond line");
         select(model, {2, 5}, {48, 5});
         require(model.selectionText() == QString("hello"), "Forward selection includes endpoint cells");
+        model.beginSelection({12, 5}, TerminalSelectionKind::Word);
+        require(model.selectionText() == QString("hello"), "Word selection on press");
+        model.extendSelection({88, 5}); model.endSelection();
+        require(model.selectionText() == QString("hello world"), "Word-granular drag");
+        model.beginSelection({12, 5}, TerminalSelectionKind::Line); model.endSelection();
+        require(model.selectionText() == QString("hello world"), "Line selection on press");
+        select(model, {2, 5}, {48, 5});
         auto frame = model.frame();
         require(frame.cells[0].selected && frame.cells[4].selected && !frame.cells[5].selected,
             "Render selection matches copied range");
@@ -138,6 +147,34 @@ int main(int argc, char** argv) {
         mouse(widget, QEvent::MouseButtonRelease, end);
         key(widget, QEvent::KeyPress, mods); key(widget, QEvent::KeyRelease, mods);
         require(copied == "hello" && sent.isEmpty(), "Lost local button state does not select or overwrite clipboard");
+        mouse(widget, QEvent::MouseButtonDblClick, start, Qt::ShiftModifier);
+        mouse(widget, QEvent::MouseButtonRelease, start);
+        key(widget, QEvent::KeyPress, mods); key(widget, QEvent::KeyRelease, mods);
+        require(copied == "hello", "Double click selects word locally in mouse mode");
+        mouse(widget, QEvent::MouseButtonPress, start, Qt::ShiftModifier);
+        mouse(widget, QEvent::MouseButtonRelease, start);
+        key(widget, QEvent::KeyPress, mods); key(widget, QEvent::KeyRelease, mods);
+        require(copied == "hello world" && sent.isEmpty(), "Third nearby click selects whole line without remote bytes");
+        TerminalWidget scrolling; scrolling.resize(scrolling.sizeHint()); scrolling.show(); app.processEvents();
+        for (int i = 0; i < 80; ++i) scrolling.feed("scroll-row-" + QByteArray::number(i) + "\r\n");
+        const auto rowText = [](TerminalFrame value) {
+            QString text; for (int x = 0; x < value.columns; ++x) text += value.cells[x].text;
+            return text;
+        };
+        const auto initial = rowText(scrolling.snapshot());
+        mouse(scrolling, QEvent::MouseButtonPress, {5, 35});
+        mouse(scrolling, QEvent::MouseMove, {5, -20});
+        auto* selectionTimer = scrolling.findChild<QTimer*>("terminalSelectionTimer");
+        require(selectionTimer && selectionTimer->isActive(), "Outside local drag starts bounded scroll timer");
+        QTest::qWait(120);
+        require(rowText(scrolling.snapshot()) != initial, "Drag scroll reveals older history");
+        mouse(scrolling, QEvent::MouseButtonRelease, {5, -20});
+        require(!selectionTimer->isActive(), "Release stops autoscroll");
+        mouse(scrolling, QEvent::MouseButtonPress, {5, 35});
+        mouse(scrolling, QEvent::MouseMove, {5, -20});
+        scrolling.feed("\x1b[?1049h\x1b[2J\x1b[HALT"); QTest::qWait(100);
+        require(!selectionTimer->isActive(), "Screen switch invalidates drag before another scroll");
+        mouse(scrolling, QEvent::MouseButtonRelease, {5, -20});
         auto* closing = new TerminalWidget;
         closing->resize(closing->sizeHint()); closing->show(); app.processEvents(); closing->feed("hello");
         mouse(*closing, QEvent::MouseButtonPress, start); mouse(*closing, QEvent::MouseMove, end);

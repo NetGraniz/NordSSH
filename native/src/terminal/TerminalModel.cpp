@@ -258,7 +258,7 @@ void TerminalModel::scrollToBottom() {
     GhosttyTerminalScrollViewport request{}; request.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
     ghostty_terminal_scroll_viewport(impl_->terminal, request);
 }
-void TerminalModel::beginSelection(QPointF position) {
+void TerminalModel::beginSelection(QPointF position, TerminalSelectionKind kind) {
     auto& state = *impl_; state.checkOwner(); endSelection();
     checked(ghostty_terminal_set(state.terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr));
     auto ref = state.selectionRef(position);
@@ -267,8 +267,21 @@ void TerminalModel::beginSelection(QPointF position) {
         std::clamp(position.x(), 0.0, double(state.columns * state.cellWidth)),
         std::clamp(position.y(), 0.0, double(state.rowCount * state.cellHeight))};
     checked(ghostty_selection_gesture_event_set(state.selectionPress, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_POSITION, &pointer));
-    const auto result = ghostty_selection_gesture_event(state.gesture, state.terminal, state.selectionPress, nullptr);
-    if (result != GHOSTTY_NO_VALUE) checked(result);
+    GhosttySelectionGestureBehavior behavior{};
+    switch (kind) {
+    case TerminalSelectionKind::Cell: behavior = GHOSTTY_SELECTION_GESTURE_BEHAVIOR_CELL; break;
+    case TerminalSelectionKind::Word: behavior = GHOSTTY_SELECTION_GESTURE_BEHAVIOR_WORD; break;
+    case TerminalSelectionKind::Line: behavior = GHOSTTY_SELECTION_GESTURE_BEHAVIOR_LINE; break;
+    default: throw std::invalid_argument("Unknown selection kind");
+    }
+    const GhosttySelectionGestureBehaviors behaviors{behavior, behavior, behavior};
+    checked(ghostty_selection_gesture_event_set(state.selectionPress, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_BEHAVIORS, &behaviors));
+    auto selection = GHOSTTY_INIT_SIZED(GhosttySelection);
+    const auto result = ghostty_selection_gesture_event(state.gesture, state.terminal, state.selectionPress, &selection);
+    if (result != GHOSTTY_NO_VALUE) {
+        checked(result);
+        checked(ghostty_terminal_set(state.terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &selection));
+    }
     state.selecting = true;
 }
 void TerminalModel::extendSelection(QPointF position) {
@@ -295,6 +308,15 @@ void TerminalModel::endSelection() {
     auto& state = *impl_; state.checkOwner();
     if (state.gesture) ghostty_selection_gesture_reset(state.gesture, state.terminal);
     state.selecting = false;
+}
+bool TerminalModel::selectionActive() {
+    auto& state = *impl_; state.checkOwner();
+    if (!state.selecting) return false;
+    auto anchor = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+    const auto result = ghostty_selection_gesture_get(state.gesture, state.terminal,
+        GHOSTTY_SELECTION_GESTURE_DATA_ANCHOR, &anchor);
+    if (result == GHOSTTY_NO_VALUE) { endSelection(); return false; }
+    checked(result); return true;
 }
 std::optional<QString> TerminalModel::selectionText() {
     auto& state = *impl_; state.checkOwner();

@@ -586,3 +586,27 @@ qt-linux-engineering.lock.json after two separately hosted Qt mirror downloads
 and comparison with published SHA1. This is first-acquisition evidence, not a
 publisher signature, reproducible distro toolchain or product packaging approval.
 The new workflow must pass before claiming any Linux Qt/TUI success.
+
+The first Linux Qt run 40074942057 at 9c00c17 built the ReleaseSafe SDK and
+adapter, passed all 11 non-TUI CTests, and exercised real vim, nano, less and top.
+The tmux case failed at shutdown: its second exit was sent before the first
+shell closed and tmux switched panes. Added an explicit expected second-window
+marker before sending the last exit; this is a fixture fix, not a suppressed
+failure. X11 and Wayland did not run in that first attempt. The follow-up
+workflow runs the three platform scenarios independently after a successful
+adapter build and caches only the exact-pin engineering SDK.
+
+Added engine-owned word/line selection and bounded drag autoscroll: double-click
+selects a word, a nearby third click selects its line, dragging outside scrolls
+one row per 50 ms tick. No timer runs after release/focus loss/hide or a screen
+generation change. Regression tests exercise both granularities, word drag,
+local ownership in remote mouse mode, scroll progress and screen-switch stop.
+IME candidate anchoring now follows the local composition caret; fallback text
+uses terminal foreground rather than an unsuitable light-theme palette color.
+Combined Windows CTest passed **15/15 in 30.27 s** after these changes.
+
+The crypto CI download failed again at the primary libssh host in 40073952912.
+Added bounded connection/retry time and an Alpine distfiles fallback only for
+network failure. Downloaded that tarball independently: SHA256 exactly matches
+the existing 49560f...1c1e9f pin. The hash check remains mandatory before extract;
+no new library version, weaker hash or automatic pin update was introduced.

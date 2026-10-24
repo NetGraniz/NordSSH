@@ -14,6 +14,7 @@ class QWheelEvent;
 
 namespace nordssh {
 enum class TerminalCursorShape { Bar, Block, Underline, Hollow };
+enum class TerminalSelectionKind { Cell, Word, Line };
 struct TerminalCell {
     QString text;
     QColor foreground, background;
@@ -55,9 +56,10 @@ public:
     void scrollToTop();
     void scrollToBottom();
     // Engine-owned tracked anchors; no borrowed grid refs escape the adapter.
-    void beginSelection(QPointF position);
+    void beginSelection(QPointF position, TerminalSelectionKind kind = TerminalSelectionKind::Cell);
     void extendSelection(QPointF position);
     void endSelection();
+    [[nodiscard]] bool selectionActive();
     // No selection, empty text or an oversized copy leaves the clipboard alone.
     [[nodiscard]] std::optional<QString> selectionText();
     static constexpr int MaximumSearchBytes = 256;

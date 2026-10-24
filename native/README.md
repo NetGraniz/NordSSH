@@ -120,7 +120,9 @@ UTF-8 limit and never truncates; an empty or oversized selection leaves the
 clipboard unchanged. Tests inject a clipboard sink, including a callback which
 closes its tab, and check shortcut-release suppression under Kitty mode. No
 real OS clipboard or actual EN/RU layout is changed. Word/line gestures,
-drag-autoscroll and native desktop clipboard acceptance remain open.
+native desktop clipboard acceptance remains open. Double-click selects a word;
+a nearby third click selects a line. Dragging outside the terminal scrolls one
+row per 50 ms tick, stopping on release, focus loss, hide or screen invalidation.
 
 `terminal_search` exercises the incremental engine search and native find bar.
 Ctrl+Shift+F opens it, Enter/Shift+Enter select older/newer matches, and Escape

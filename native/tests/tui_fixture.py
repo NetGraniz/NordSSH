@@ -208,6 +208,7 @@ def main():
                     fixture.text("printf 'TMUX-SECOND\\n'"); fixture.key(KEY_ENTER); fixture.expect("TMUX-SECOND")
                     fixture.resize(); fixture.key(ord("B"), CTRL); fixture.literal("p"); fixture.expect("TMUX-FIRST")
                     fixture.text("exit"); fixture.key(KEY_ENTER)
+                    fixture.expect("TMUX-SECOND")
                     fixture.text("exit"); fixture.key(KEY_ENTER); fixture.exited()
                 print(f"PASS {args.qpa}: real {name}, native VT/Qt raster/input and resize", flush=True)
             finally:

@@ -69,6 +69,10 @@ int main(int argc, char** argv) {
         const auto beforePreedit = raster(widget);
         ime(widget, QString::fromUtf8("日本語"));
         require(sent.isEmpty() && raster(widget) != beforePreedit, "Composition visible locally without network writes");
+        QInputMethodQueryEvent composingCursor(Qt::ImCursorRectangle);
+        QApplication::sendEvent(&widget, &composingCursor);
+        require(composingCursor.value(Qt::ImCursorRectangle).toRect().x() > 0,
+            "Input-method candidate anchor follows local composition caret");
         ime(widget, {});
         require(sent.isEmpty() && raster(widget) == beforePreedit, "Cancelled composition clears without sending");
         ime(widget, QString(1025, 'x'));

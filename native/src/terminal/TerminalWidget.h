@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <functional>
 #include <QTextLayout>
+#include <QElapsedTimer>
 class QFrame;
 class QLabel;
 class QLineEdit;
@@ -59,6 +60,7 @@ private:
     void mouseInput(QMouseEvent*);
     void updateCursorBlink();
     void paintPreedit(QPainter& painter);
+    void updateSelectionScroll();
     TerminalModel model_;
     TerminalFrame frame_;
     int cellWidth_ = 9, cellHeight_ = 18, baseline_ = 14;
@@ -88,5 +90,9 @@ private:
     QString preedit_;
     int preeditCursor_ = 0;
     QList<QTextLayout::FormatRange> preeditFormats_;
+    QTimer* selectionTimer_ = nullptr;
+    QElapsedTimer doubleClickClock_;
+    QPointF doubleClickPosition_;
+    bool tripleClickArmed_ = false;
 };
 } // namespace nordssh

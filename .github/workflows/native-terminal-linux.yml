@@ -29,22 +29,40 @@ jobs:
       - name: Apply reviewed exact-pin terminal engine patch
         shell: pwsh
         run: ./native/scripts/patch-ghostty.ps1 -Source vt-source
+      - name: Restore exact-pin engineering VT SDK
+        id: sdk_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: vt-source/zig-out
+          key: nordssh-vt-linux-08a9518340e19487-zig0170-${{ hashFiles('native/patches/**') }}
       - name: Acquire hash-verified Zig and build ReleaseSafe VT SDK
+        id: vt_build
+        if: steps.sdk_cache.outputs.cache-hit != 'true'
         run: |
           curl --fail --location --retry 3 --proto '=https' --tlsv1.2 'https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz' --output "$RUNNER_TEMP/zig.tar.xz"
           echo "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026  $RUNNER_TEMP/zig.tar.xz" | sha256sum --check --status
           tar -xf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP"
           cd vt-source
           "$RUNNER_TEMP/zig-x86_64-linux-0.17.0/zig" build -Demit-lib-vt -Demit-themes=false -Dtarget=x86_64-linux-gnu -Doptimize=ReleaseSafe -Dsimd=false -j1 --summary all
+      - name: Save engineering SDK before downstream tests
+        if: steps.sdk_cache.outputs.cache-hit != 'true' && steps.vt_build.outcome == 'success'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: vt-source/zig-out
+          key: ${{ steps.sdk_cache.outputs.cache-primary-key }}
       - name: Build Qt adapter and test-only driver
+        id: adapter_build
         run: |
           cmake -S native -B native/build-linux-terminal -DCMAKE_BUILD_TYPE=Debug -DNORDSSH_BUILD_TERMINAL=ON -DNORDSSH_BUILD_TUI_TESTS=ON -DNORDSSH_BUILD_VT_GATE=ON -DNORDSSH_GHOSTTY_SDK="$GITHUB_WORKSPACE/vt-source/zig-out" -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/qt-sdk"
           cmake --build native/build-linux-terminal --parallel 2
       - name: Component tests and actual offscreen TUI programs
+        if: ${{ !cancelled() && steps.adapter_build.outcome == 'success' }}
         run: ctest --test-dir native/build-linux-terminal --output-on-failure
       - name: Actual TUI programs through Qt X11 raster widgets
+        if: ${{ !cancelled() && steps.adapter_build.outcome == 'success' }}
         run: xvfb-run -a python3 native/tests/tui_fixture.py native/build-linux-terminal/terminal_tui_driver --qpa xcb
       - name: Actual TUI programs through Qt Wayland raster widgets
+        if: ${{ !cancelled() && steps.adapter_build.outcome == 'success' }}
         run: |
           export XDG_RUNTIME_DIR="$(mktemp -d)"
           chmod 700 "$XDG_RUNTIME_DIR"

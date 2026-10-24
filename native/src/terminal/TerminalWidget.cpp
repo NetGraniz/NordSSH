@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
+#include <QInputMethod>
 #include <QFocusEvent>
 #include <QKeyEvent>
 #include <QMessageBox>
@@ -79,6 +80,20 @@ TerminalWidget::TerminalWidget(QWidget* parent) : QWidget(parent) {
     connect(cursorTimer_, &QTimer::timeout, this, [this] {
         updateCursorBlink();
         if (cursorTimer_->isActive()) { cursorPhase_ = !cursorPhase_; update(); }
+    });
+    selectionTimer_ = new QTimer(this); selectionTimer_->setObjectName("terminalSelectionTimer");
+    selectionTimer_->setInterval(50);
+    connect(selectionTimer_, &QTimer::timeout, this, [this] {
+        QPointer<TerminalWidget> self(this);
+        try {
+            if (failed_ || !localSelection_ || !isVisible() || !model_.selectionActive()) {
+                selectionTimer_->stop(); return;
+            }
+            const int edge = frame_.rows * cellHeight_;
+            if (lastMouse_.y() >= 0 && lastMouse_.y() < edge) { selectionTimer_->stop(); return; }
+            model_.scroll(lastMouse_.y() < 0 ? -1 : 1);
+            model_.extendSelection(lastMouse_); frame_ = model_.frame(); update();
+        } catch (...) { if (self) self->fail(); }
     });
     frame_ = model_.frame();
 }
@@ -200,6 +215,9 @@ QSize TerminalWidget::sizeHint() const { return {cellWidth_ * 80, cellHeight_ * 
 void TerminalWidget::fail() noexcept {
     if (failed_) return;
     failed_ = true;
+    if (selectionTimer_) selectionTimer_->stop();
+    if (cursorTimer_) cursorTimer_->stop();
+    if (searchTimer_) searchTimer_->stop();
     setEnabled(false);
     try { const auto callback = failure_; if (callback) callback(); } catch (...) {}
 }
@@ -222,6 +240,9 @@ bool TerminalWidget::event(QEvent* event) {
     // Inactive tabs must not wake every 40 ms merely because find was open.
     if (event->type() == QEvent::Hide && searchTimer_) searchTimer_->stop();
     if (event->type() == QEvent::Hide && cursorTimer_) cursorTimer_->stop();
+    if (event->type() == QEvent::Hide && selectionTimer_) {
+        selectionTimer_->stop(); model_.endSelection(); localSelection_ = false;
+    }
     if (event->type() == QEvent::Show && cursorTimer_) updateCursorBlink();
     if (event->type() == QEvent::Show && searchTimer_ && searchBar_ &&
         !searchBar_->isHidden() && !searchInput_->text().isEmpty()) searchTimer_->start();
@@ -313,8 +334,11 @@ void TerminalWidget::paintPreedit(QPainter& painter) {
     const QRectF clip(0, y, frame_.columns * cellWidth_, cellHeight_);
     painter.save(); painter.setClipRect(clip);
     painter.fillRect(QRectF(x, y, std::min<qreal>(line.naturalTextWidth() + 2, width()), cellHeight_), frame_.background);
-    painter.setPen(palette().color(QPalette::Text)); layout.draw(&painter, {x, y});
-    if (preeditCursorVisible_) layout.drawCursor(&painter, {x, y}, preeditCursor_, 2);
+    painter.setPen(frame_.cells[frame_.cursorY * frame_.columns + frame_.cursorX].foreground);
+    layout.draw(&painter, {x, y});
+    int cursor = preeditCursor_;
+    while (cursor > 0 && !layout.isValidCursorPosition(cursor)) --cursor;
+    if (preeditCursorVisible_) layout.drawCursor(&painter, {x, y}, cursor, 2);
     painter.restore();
 }
 void TerminalWidget::resizeEvent(QResizeEvent* event) {
@@ -338,6 +362,7 @@ void TerminalWidget::refreshGeometry() {
         const int rows = std::clamp((height() - barHeight) / cellHeight_, 1, 256);
         model_.resize(columns, rows, cellWidth_, cellHeight_);
         localSelection_ = false;
+        if (selectionTimer_) selectionTimer_->stop();
         frame_ = model_.frame(); update();
         const auto callback = resize_;
         if (callback) callback(columns, rows);
@@ -462,10 +487,11 @@ void TerminalWidget::mouseInput(QMouseEvent* event) {
         if (!motion && event->button() != Qt::LeftButton && event->button() != Qt::MiddleButton && event->button() != Qt::RightButton) return;
         if (localSelection_ && (motion || (release && event->button() == Qt::LeftButton))) {
             if (motion && !event->buttons().testFlag(Qt::LeftButton)) {
-                model_.endSelection(); localSelection_ = false; return;
+                model_.endSelection(); localSelection_ = false; selectionTimer_->stop(); return;
             }
             model_.extendSelection(event->position());
             if (release) { model_.endSelection(); localSelection_ = false; }
+            updateSelectionScroll();
             frame_ = model_.frame(); update(); return;
         }
         if (!motion && !release && event->button() == Qt::LeftButton &&
@@ -473,7 +499,18 @@ void TerminalWidget::mouseInput(QMouseEvent* event) {
             if (event->position().x() < 0 || event->position().y() < 0 ||
                 event->position().x() >= frame_.columns * cellWidth_ ||
                 event->position().y() >= frame_.rows * cellHeight_) return;
-            model_.beginSelection(event->position()); localSelection_ = true;
+            auto kind = TerminalSelectionKind::Cell;
+            if (event->type() == QEvent::MouseButtonDblClick) {
+                kind = TerminalSelectionKind::Word; tripleClickArmed_ = true;
+                doubleClickClock_.start(); doubleClickPosition_ = event->position();
+            } else {
+                if (tripleClickArmed_ && doubleClickClock_.isValid() &&
+                    doubleClickClock_.elapsed() <= QApplication::doubleClickInterval() &&
+                    (event->position() - doubleClickPosition_).manhattanLength() <= QApplication::startDragDistance())
+                    kind = TerminalSelectionKind::Line;
+                tripleClickArmed_ = false;
+            }
+            model_.beginSelection(event->position(), kind); localSelection_ = true;
             frame_ = model_.frame(); update(); return;
         }
         if (release) {
@@ -499,9 +536,17 @@ void TerminalWidget::mousePressEvent(QMouseEvent* event) { mouseInput(event); }
 void TerminalWidget::mouseDoubleClickEvent(QMouseEvent* event) { mouseInput(event); }
 void TerminalWidget::mouseReleaseEvent(QMouseEvent* event) { mouseInput(event); }
 void TerminalWidget::mouseMoveEvent(QMouseEvent* event) { mouseInput(event); }
+void TerminalWidget::updateSelectionScroll() {
+    if (localSelection_ && isVisible() &&
+        (lastMouse_.y() < 0 || lastMouse_.y() >= frame_.rows * cellHeight_)) {
+        if (!selectionTimer_->isActive()) selectionTimer_->start();
+    }
+    else selectionTimer_->stop();
+}
 void TerminalWidget::focusOutEvent(QFocusEvent* event) {
     preedit_.clear(); preeditFormats_.clear(); updateCursorBlink(); update();
     model_.endSelection(); localSelection_ = false;
+    selectionTimer_->stop(); tripleClickArmed_ = false;
     // Keep local-release suppression if focus changes while a navigation key
     // is held. A subsequent nonlocal press explicitly replaces that state.
     wheelAngle_ = wheelPixels_ = remoteWheel_ = 0;
@@ -571,6 +616,8 @@ void TerminalWidget::inputMethodEvent(QInputMethodEvent* event) {
             }
         }
         updateCursorBlink(); update();
+        QGuiApplication::inputMethod()->update(Qt::ImCursorRectangle);
+        if (!self) return;
         // A remote terminal has no locally editable surrounding document.
         // Never translate IME replacement requests into guessed Backspaces.
         if (event->replacementStart() != 0 || event->replacementLength() != 0 ||
@@ -589,7 +636,21 @@ QVariant TerminalWidget::inputMethodQuery(Qt::InputMethodQuery query) const {
     if (query == Qt::ImHints) return QVariant::fromValue(Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase |
         (frame_.passwordInput ? Qt::ImhSensitiveData | Qt::ImhHiddenText : Qt::ImhNone));
     if (query == Qt::ImCursorRectangle)
+    {
+        if (!preedit_.isEmpty()) {
+            QTextLayout layout(preedit_, font());
+            QTextOption option; option.setWrapMode(QTextOption::NoWrap); layout.setTextOption(option);
+            layout.beginLayout(); auto line = layout.createLine();
+            line.setLineWidth(frame_.columns * cellWidth_); layout.endLayout();
+            int cursor = preeditCursor_;
+            while (cursor > 0 && !layout.isValidCursorPosition(cursor)) --cursor;
+            const qreal x = std::min<qreal>(frame_.cursorX * cellWidth_,
+                std::max<qreal>(0, frame_.columns * cellWidth_ - line.naturalTextWidth()));
+            const qreal caret = std::clamp<qreal>(x + line.cursorToX(cursor), 0, std::max(0, frame_.columns * cellWidth_ - 2));
+            return QRectF(caret, frame_.cursorY * cellHeight_, 2, cellHeight_).toAlignedRect();
+        }
         return QRect(frame_.cursorX * cellWidth_, frame_.cursorY * cellHeight_, cellWidth_, cellHeight_);
+    }
     return QWidget::inputMethodQuery(query);
 }
 } // namespace nordssh
