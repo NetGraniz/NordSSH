@@ -43,6 +43,20 @@ int main(int argc, char** argv) {
         QLockFile other(service.files().path("store.lock")); other.setStaleLockTime(0); require(other.tryLock(0));
         reject([&] { service.save(VaultDocument{}); }); other.unlock();
         require(service.files().read(first) == saved);
+#ifndef _WIN32
+        // Real rename failure, not only an injected exception. Separate store
+        // avoids making a QLockFile undeletable during the permission change.
+        const auto renameRoot = QDir(temp.path()).filePath("rename-failure");
+        PrivateFiles renameFiles(renameRoot); renameFiles.write("sample.nordvault", initial);
+        bool renameFailed = false;
+        try {
+            renameFiles.write("sample.nordvault", saved, [&] {
+                require(QFile::setPermissions(renameRoot, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+            });
+        } catch (const FileError&) { renameFailed = true; }
+        require(QFile::setPermissions(renameRoot, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        require(renameFailed && renameFiles.read("sample.nordvault") == initial);
+#endif
         const auto exported = service.exportEncrypted("export-pass");
         auto exportedBytes = service.files().read(exported);
         require(exportedBytes != saved);

@@ -84,6 +84,16 @@ int main(int argc, char** argv) {
                 reject([&] { client.upload(root,"source","/existing",true,[&](TransferProgress) {stop.request_stop();}, {stop.get_token(),std::chrono::steady_clock::now()+5s}); }); return;
             }
             if (mode == "no-extension") { reject([&] { client.upload(root,"source","/existing",true); }); return; }
+            if (mode == "commit-unknown") {
+                bool unknown = false;
+                try { client.upload(root,"source","/existing",true); }
+                catch (const TransferCommitUnknown&) { unknown = true; }
+                require(unknown); return;
+            }
+            if (mode == "oversize") {
+                reject([&] { client.download("/existing",root,"oversize",false); });
+                require(!QFileInfo::exists(root + "/oversize")); return;
+            }
             require(!client.list("/").empty());
             reject([&] { client.upload(root,"source","/existing",false); });
             reject([&] { client.download("/existing",root,"../escape",false); });

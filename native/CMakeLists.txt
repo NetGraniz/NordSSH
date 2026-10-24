@@ -253,6 +253,12 @@ if(NORDSSH_BUILD_TRANSFERS)
         target_link_libraries(openssh_gate_tests PRIVATE nordssh_transfers)
         option(NORDSSH_ISOLATED_OPENSSH "Enable real sshd test only on disposable CI runners" OFF)
         if(NORDSSH_ISOLATED_OPENSSH AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_executable(vault_disk_gate_tests tests/VaultDiskGateTests.cpp)
+            target_link_libraries(vault_disk_gate_tests PRIVATE nordssh_data)
+            target_compile_options(vault_disk_gate_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            add_test(NAME real_vault_disk COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vault_disk_fixture.py $<TARGET_FILE:vault_disk_gate_tests>)
+            set_tests_properties(real_vault_disk PROPERTIES TIMEOUT 70 ENVIRONMENT "NORDSSH_ISOLATED_OPENSSH=1")
             add_test(NAME real_openssh COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/openssh_gate_fixture.py $<TARGET_FILE:openssh_gate_tests>)
             set_tests_properties(real_openssh PROPERTIES TIMEOUT 100 ENVIRONMENT "NORDSSH_ISOLATED_OPENSSH=1")

@@ -9,7 +9,6 @@ import base64
 import hashlib
 import os
 import pwd
-import signal
 import socket
 import subprocess
 import sys
@@ -104,7 +103,7 @@ AllowTcpForwarding local
 PermitOpen 127.0.0.1:{echo_port}
 GatewayPorts no
 Subsystem sftp internal-sftp
-LogLevel ERROR
+LogLevel VERBOSE
 """,encoding="utf-8")
             sudo("mkdir","-p","/run/sshd")
             sudo("/usr/sbin/sshd","-t","-f",config)
@@ -140,6 +139,12 @@ LogLevel ERROR
                 if child.returncode:
                     raise RuntimeError(f"Real OpenSSH client gate failed: {mode}")
             print("Real private OpenSSH public-key/SFTP CRUD/staging/overwrite/symlink/forwarding and negative auth passed")
+        except BaseException:
+            if log:
+                log.flush()
+                print("Private synthetic sshd diagnostic tail:",file=sys.stderr)
+                print((root/"daemon.log").read_text(encoding="utf-8",errors="replace")[-6000:],file=sys.stderr)
+            raise
         finally:
             if daemon is not None and daemon.poll() is None:
                 sudo("/bin/kill","-TERM","--",f"-{daemon.pid}")

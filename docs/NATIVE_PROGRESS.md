@@ -901,3 +901,12 @@ in 15.68 s. Added a real OpenSSH gate, restricted to disposable GitHub runners:
 private loopback sshd config/keys, one unique temporary account, stdin-only
 synthetic client key, negative auth/trust, SFTP integrity/CRUD/symlink refusal,
 and actual OpenSSH direct forwarding with half-close. Execution remains pending.
+
+Expanded SFTP to eight modes: absent advertised overwrite capability is refused
+before staging, >1 TiB metadata is rejected, and server-side commit followed by
+connection abort produces CommitUnknown without deleting the complete target.
+Windows expanded fixture passed in **19.53 s**. Linux 40106003789 passed the
+ordinary modules but failed the first real OpenSSH basic mode; added phase and
+synthetic sshd diagnostics rather than weakening authentication/trust checks.
+Actual CI-only 128 KiB tmpfs full-disk rollback and Unix permission-denied rename
+tests are added for the next run. They do not fill the runner's real filesystem.

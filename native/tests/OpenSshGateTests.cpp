@@ -22,10 +22,12 @@ int main(int argc,char** argv) {
         QTemporaryDir local;require(local.isValid());
         auto worker=std::async(std::launch::async,[&] {
             auto connect=[&](Session& session) {
+                std::cout<<"Real OpenSSH phase: transport\n";
                 session.connectResolved({"openssh.fixture.invalid",port,user},"127.0.0.1");
                 const auto identity=session.hostIdentity();
                 require(QByteArray(reinterpret_cast<const char*>(identity.sha256.data()),32).toHex().toStdString()==fingerprint);
                 if(mode!="untrusted") session.authorizeHost(identity);
+                std::cout<<"Real OpenSSH phase: approved-key authentication\n";
                 session.authenticatePrivateKey(keyText);
             };
             if(mode=="badkey"||mode=="untrusted") {
@@ -33,7 +35,7 @@ int main(int argc,char** argv) {
                 require(refused);return;
             }
             {
-                Session session;connect(session);SftpClient sftp(session);
+                Session session;connect(session);std::cout<<"Real OpenSSH phase: SFTP\n";SftpClient sftp(session);
                 require(!sftp.list(remote).empty());
                 const auto source=local.path()+"/source";
                 {QFile file(source);require(file.open(QIODevice::WriteOnly));require(file.write(QByteArray(327680,'r'))==327680);}
