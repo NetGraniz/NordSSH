@@ -2,6 +2,11 @@
 #include "TerminalModel.h"
 #include <QWidget>
 #include <functional>
+class QFrame;
+class QLabel;
+class QLineEdit;
+class QPushButton;
+class QTimer;
 
 namespace nordssh {
 class PasteRouter;
@@ -17,10 +22,13 @@ public:
     void setPasteSource(std::function<QString()> read, std::function<bool()> confirm);
     void setRightClickPaste(bool enabled);
     void setCopySink(std::function<void(const QString&)> write);
+    void openSearch();
+    void closeSearch();
     [[nodiscard]] TerminalFrame snapshot();
     QSize sizeHint() const override;
 protected:
     bool event(QEvent*) override;
+    bool eventFilter(QObject*, QEvent*) override;
     void changeEvent(QEvent*) override;
     void paintEvent(QPaintEvent*) override;
     void resizeEvent(QResizeEvent*) override;
@@ -42,6 +50,9 @@ private:
     void refreshGeometry();
     bool historyNavigation(QKeyEvent*);
     bool copyShortcut(QKeyEvent*);
+    bool searchShortcut(QKeyEvent*);
+    void searchStep();
+    void searchMove(bool older);
     void followOutput();
     void mouseInput(QMouseEvent*);
     TerminalModel model_;
@@ -49,6 +60,7 @@ private:
     int cellWidth_ = 9, cellHeight_ = 18, baseline_ = 14;
     bool failed_ = false;
     bool localSelection_ = false, copyKeyHeld_ = false;
+    bool searchKeyHeld_ = false, searchSelectFirst_ = false, searchEscapeHeld_ = false;
     unsigned historyKeys_ = 0;
     PasteRouter* pasteRouter_ = nullptr;
     Qt::MouseButtons remoteButtons_;
@@ -62,5 +74,10 @@ private:
     std::function<QString()> readPaste_;
     std::function<bool()> confirmPaste_;
     std::function<void(const QString&)> writeCopy_;
+    QFrame* searchBar_ = nullptr;
+    QLineEdit* searchInput_ = nullptr;
+    QLabel* searchCount_ = nullptr;
+    QPushButton *searchOlder_ = nullptr, *searchNewer_ = nullptr;
+    QTimer* searchTimer_ = nullptr;
 };
 } // namespace nordssh

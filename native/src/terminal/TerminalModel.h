@@ -28,6 +28,11 @@ struct TerminalFrame {
     bool followingOutput = true, mouseTracking = false;
     int cursorX = 0, cursorY = 0;
 };
+struct TerminalSearchState {
+    std::size_t matches = 0;
+    std::optional<std::size_t> selected; // Newest first, zero based.
+    bool complete = true, limited = false;
+};
 
 // Single-owner GUI-thread adapter. Never expose engine pointers or borrowed
 // render buffers to callers. No clipboard, file, URL or process callbacks.
@@ -51,6 +56,12 @@ public:
     void endSelection();
     // No selection, empty text or an oversized copy leaves the clipboard alone.
     [[nodiscard]] std::optional<QString> selectionText();
+    static constexpr int MaximumSearchBytes = 256;
+    static constexpr std::size_t MaximumSearchMatches = 10000;
+    // Literal UTF-8 search: ASCII case-insensitive, other scalars byte-exact.
+    [[nodiscard]] bool setSearch(const QString& query);
+    [[nodiscard]] TerminalSearchState advanceSearch(); // One feed + at most four ticks.
+    [[nodiscard]] bool selectSearchMatch(bool older = true); // Only after caught up.
     [[nodiscard]] TerminalFrame frame();
     [[nodiscard]] QByteArray key(const QKeyEvent& event);
     [[nodiscard]] QByteArray mouse(const QMouseEvent& event);

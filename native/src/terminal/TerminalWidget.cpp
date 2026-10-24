@@ -4,6 +4,12 @@
 #include <QClipboard>
 #include <QFontDatabase>
 #include <QFontMetrics>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QTimer>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
@@ -35,6 +41,12 @@ bool copyKey(const QKeyEvent& event) {
 }
 bool copyModifiers(const QKeyEvent& event) {
     return event.modifiers() == (Qt::ControlModifier | Qt::ShiftModifier);
+}
+bool findKey(const QKeyEvent& event) {
+#ifdef Q_OS_WIN
+    if (event.nativeVirtualKey() == 0x46) return true;
+#endif
+    return event.key() == Qt::Key_F;
 }
 }
 TerminalWidget::TerminalWidget(QWidget* parent) : QWidget(parent) {
@@ -70,6 +82,107 @@ void TerminalWidget::setCopySink(std::function<void(const QString&)> write) { wr
 void TerminalWidget::setPasteSource(std::function<QString()> read, std::function<bool()> confirm) {
     readPaste_ = std::move(read); confirmPaste_ = std::move(confirm);
 }
+void TerminalWidget::openSearch() {
+    if (failed_) return;
+    QPointer<TerminalWidget> self(this);
+    if (!searchBar_) {
+        searchBar_ = new QFrame(this);
+        searchBar_->setObjectName("terminalSearchBar");
+        searchBar_->setAutoFillBackground(true);
+        auto* layout = new QHBoxLayout(searchBar_);
+        layout->setContentsMargins(6, 4, 6, 4);
+        searchInput_ = new QLineEdit(searchBar_);
+        searchInput_->setObjectName("terminalSearchInput");
+        searchInput_->setPlaceholderText(tr("Find in terminal"));
+        searchInput_->setAccessibleName(tr("Find in terminal"));
+        searchInput_->setToolTip(tr("Literal search. ASCII ignores case; other characters match exactly."));
+        searchInput_->setMaxLength(TerminalModel::MaximumSearchBytes);
+        searchInput_->installEventFilter(this);
+        searchCount_ = new QLabel(searchBar_); searchCount_->setTextFormat(Qt::PlainText);
+        searchCount_->setObjectName("terminalSearchCount");
+        searchOlder_ = new QPushButton(tr("Older"), searchBar_);
+        searchNewer_ = new QPushButton(tr("Newer"), searchBar_);
+        auto* close = new QPushButton(tr("Close"), searchBar_);
+        for (auto* button : {searchOlder_, searchNewer_, close}) button->installEventFilter(this);
+        layout->addWidget(searchInput_, 1); layout->addWidget(searchCount_);
+        layout->addWidget(searchOlder_); layout->addWidget(searchNewer_); layout->addWidget(close);
+        searchTimer_ = new QTimer(this); searchTimer_->setInterval(40);
+        connect(searchTimer_, &QTimer::timeout, this, [this] { searchStep(); });
+        connect(searchInput_, &QLineEdit::textChanged, this, [this](const QString& text) {
+            QPointer<TerminalWidget> self(this);
+            try {
+                if (!model_.setSearch(text)) {
+                    static_cast<void>(model_.setSearch({}));
+                    searchCount_->setText(tr("Invalid query or UTF-8 limit exceeded"));
+                    searchOlder_->setEnabled(false); searchNewer_->setEnabled(false);
+                    searchTimer_->stop(); return;
+                }
+                searchSelectFirst_ = !text.isEmpty();
+                if (isVisible()) searchTimer_->start();
+                searchStep();
+            } catch (...) { if (self) self->fail(); }
+        });
+        connect(searchOlder_, &QPushButton::clicked, this, [this] { searchMove(true); });
+        connect(searchNewer_, &QPushButton::clicked, this, [this] { searchMove(false); });
+        connect(close, &QPushButton::clicked, this, [this] { closeSearch(); });
+    }
+    searchBar_->show(); searchBar_->raise(); searchInput_->setFocus();
+    if (!self) return; // Focus loss can release a remote button and close the tab.
+    searchInput_->selectAll();
+    searchTimer_->start(); searchStep();
+    if (self) refreshGeometry();
+}
+void TerminalWidget::closeSearch() {
+    if (!searchBar_) return;
+    QPointer<TerminalWidget> self(this);
+    searchTimer_->stop(); searchInput_->clear();
+    if (!self) return;
+    searchTimer_->stop();
+    searchBar_->hide(); setFocus();
+    if (self) refreshGeometry();
+}
+bool TerminalWidget::eventFilter(QObject* target, QEvent* event) {
+    if (searchBar_ && searchBar_->isVisible() &&
+        (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease || event->type() == QEvent::ShortcutOverride)) {
+        const auto* key = static_cast<QKeyEvent*>(event);
+        if (key->key() == Qt::Key_Escape || key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) {
+            event->accept();
+            if (event->type() == QEvent::KeyPress && !key->isAutoRepeat()) {
+                if (key->key() == Qt::Key_Escape) { searchEscapeHeld_ = true; closeSearch(); }
+                else searchMove(!key->modifiers().testFlag(Qt::ShiftModifier));
+            }
+            return true;
+        }
+    }
+    return QWidget::eventFilter(target, event);
+}
+void TerminalWidget::searchStep() {
+    if (failed_ || !searchBar_ || !searchBar_->isVisible()) return;
+    QPointer<TerminalWidget> self(this);
+    try {
+        auto state = model_.advanceSearch();
+        if (state.complete && state.matches && searchSelectFirst_) {
+            searchSelectFirst_ = false;
+            static_cast<void>(model_.selectSearchMatch()); state = model_.advanceSearch();
+            frame_ = model_.frame(); update();
+        }
+        if (state.limited) searchCount_->setText(tr("Too many matches; narrow search"));
+        else if (!state.complete) searchCount_->setText(tr("Searching…"));
+        else if (state.selected) searchCount_->setText(tr("%1 of %2").arg(*state.selected + 1).arg(state.matches));
+        else searchCount_->setText(tr("%1 matches").arg(state.matches));
+        searchOlder_->setEnabled(state.complete && state.matches != 0);
+        searchNewer_->setEnabled(state.complete && state.matches != 0);
+        if (state.limited || searchInput_->text().isEmpty()) searchTimer_->stop();
+    } catch (...) { if (self) self->fail(); }
+}
+void TerminalWidget::searchMove(bool older) {
+    if (failed_) return;
+    QPointer<TerminalWidget> self(this);
+    try {
+        if (model_.selectSearchMatch(older)) { frame_ = model_.frame(); update(); }
+        searchStep();
+    } catch (...) { if (self) self->fail(); }
+}
 void TerminalWidget::updateMetrics() {
     const QFontMetrics metrics(font());
     cellWidth_ = std::max(1, metrics.horizontalAdvance(QLatin1Char('M')));
@@ -97,10 +210,14 @@ void TerminalWidget::feed(const QByteArray& bytes) {
 }
 TerminalFrame TerminalWidget::snapshot() { return frame_; }
 bool TerminalWidget::event(QEvent* event) {
+    // Inactive tabs must not wake every 40 ms merely because find was open.
+    if (event->type() == QEvent::Hide && searchTimer_) searchTimer_->stop();
+    if (event->type() == QEvent::Show && searchTimer_ && searchBar_ &&
+        !searchBar_->isHidden() && !searchInput_->text().isEmpty()) searchTimer_->start();
     if (event->type() == QEvent::ShortcutOverride) {
         auto* key = static_cast<QKeyEvent*>(event);
         if ((key->modifiers() == Qt::ShiftModifier && historyKey(key->key())) ||
-            (copyKey(*key) && copyModifiers(*key))) {
+            (copyKey(*key) && copyModifiers(*key)) || (findKey(*key) && copyModifiers(*key))) {
             event->accept(); return true;
         }
     }
@@ -162,7 +279,9 @@ void TerminalWidget::refreshGeometry() {
     try {
         updateMetrics();
         const int columns = std::clamp(width() / cellWidth_, 1, 512);
-        const int rows = std::clamp(height() / cellHeight_, 1, 256);
+        const int barHeight = searchBar_ && searchBar_->isVisible() ? searchBar_->sizeHint().height() : 0;
+        if (searchBar_) searchBar_->setGeometry(0, std::max(0, height() - barHeight), width(), barHeight);
+        const int rows = std::clamp((height() - barHeight) / cellHeight_, 1, 256);
         model_.resize(columns, rows, cellWidth_, cellHeight_);
         localSelection_ = false;
         frame_ = model_.frame(); update();
@@ -175,6 +294,7 @@ void TerminalWidget::keyPressEvent(QKeyEvent* event) {
     if (failed_) return;
     QPointer<TerminalWidget> self(this);
     try {
+        if (searchShortcut(event)) return;
         if (copyShortcut(event)) return;
         if (historyNavigation(event)) return;
         const auto bytes = model_.key(*event);
@@ -183,6 +303,26 @@ void TerminalWidget::keyPressEvent(QKeyEvent* event) {
     } catch (...) { if (self) self->fail(); }
 }
 void TerminalWidget::keyReleaseEvent(QKeyEvent* event) { keyPressEvent(event); }
+bool TerminalWidget::searchShortcut(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Escape && searchEscapeHeld_) {
+        if (event->type() == QEvent::KeyRelease) {
+            if (!event->isAutoRepeat()) searchEscapeHeld_ = false;
+            return true;
+        }
+        if (event->isAutoRepeat()) return true;
+        searchEscapeHeld_ = false;
+    }
+    if (!findKey(*event)) return false;
+    if (event->type() == QEvent::KeyRelease) {
+        if (!searchKeyHeld_) return false;
+        if (!event->isAutoRepeat()) searchKeyHeld_ = false;
+        return true;
+    }
+    if (event->isAutoRepeat() && searchKeyHeld_) return true;
+    searchKeyHeld_ = false;
+    if (!copyModifiers(*event)) return false;
+    searchKeyHeld_ = true; openSearch(); return true;
+}
 bool TerminalWidget::copyShortcut(QKeyEvent* event) {
     if (!copyKey(*event)) return false;
     if (event->type() == QEvent::KeyRelease) {

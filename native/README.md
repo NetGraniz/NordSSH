@@ -120,4 +120,17 @@ UTF-8 limit and never truncates; an empty or oversized selection leaves the
 clipboard unchanged. Tests inject a clipboard sink, including a callback which
 closes its tab, and check shortcut-release suppression under Kitty mode. No
 real OS clipboard or actual EN/RU layout is changed. Word/line gestures,
-drag-autoscroll, search and native desktop clipboard acceptance remain open.
+drag-autoscroll and native desktop clipboard acceptance remain open.
+
+`terminal_search` exercises the incremental engine search and native find bar.
+Ctrl+Shift+F opens it, Enter/Shift+Enter select older/newer matches, and Escape
+closes it without sending a terminal key release. The bar reserves screen space
+and reports progress/counts. Literal matching ignores ASCII case only; Unicode
+is byte-exact. Queries are capped at 256 UTF-8 bytes. Work advances by one engine
+feed and up to four ticks per timer step, rather than a blocking full-history
+run. Above 10,000 observed matches the search drops retained results and asks
+for a narrower query. This is a retention policy, not a custom allocator ceiling:
+an individual engine step can transiently exceed that count. Empty/limited
+searches and hidden tabs do not keep the UI timer running. Only the selected
+match is highlighted; highlight-all, regex and Unicode case folding are not
+implemented. Synthetic offscreen tests do not prove native desktop acceptance.

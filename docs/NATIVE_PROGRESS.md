@@ -513,3 +513,41 @@ wide-cell highlighting and lost-button cancellation. Linux Qt desktop,
 real OS clipboard/layout, drag-autoscroll, word/line selection, search and real
 fullscreen applications remain open. This is an engineering increment, not a
 native application release or a request for user testing.
+
+## Stage 1 started: incremental terminal find, 2026-10-24
+
+Confirmed clean main/origin and a successful ff-only pull at e822ba8. Implemented
+the pinned Ghostty search API instead of exporting a second history text buffer.
+The model performs at most one engine feed and four ticks per advance; navigation
+waits for a completed search with no intervening terminal write/resize. Query
+admission checks 256 UTF-8 bytes, valid UTF-16 and no C0/DEL controls before passing
+data to the engine. Matching ignores ASCII case only; other Unicode is literal.
+
+The native find bar opens with Ctrl+Shift+F, leaving remote Ctrl+F unchanged.
+Enter and Shift+Enter navigate older/newer results. The bar reserves terminal
+rows rather than hiding matching text underneath an overlay. Escape's release
+is suppressed after focus returns to a Kitty-mode terminal. A 40 ms timer drives
+progress while search is active and visible; empty/limited searches stop it.
+Above 10,000 observed matches the adapter clears retained search state. This
+limits retention across steps, not peak allocation inside an engine feed/tick.
+Only the selected match is highlighted. Regex, highlight-all and full Unicode
+case folding are not promised.
+
+New offscreen tests cover history, navigation/wrap, live output, resize/reflow,
+screen separation, combining/wide/Cyrillic text, query admission, dense-result
+refusal/recovery, native find controls, grid restoration and local key isolation.
+The 5,000-line corpus records observed elapsed time, not a performance guarantee.
+Final combined Windows Debug CTest passed **14/14 in 29.51 s**, including
+hidden-tab timer suspension and tab destruction from the resize callback.
+
+Checked CI run 40072605302 for the preceding selection commit: Windows/Linux
+core and Linux sanitizers passed; the crypto job failed downloading libssh from
+www.libssh.org (curl connection error 7), before compiling the project. This run
+is still failed, not relabelled green. The next pushed commit triggers new CI.
+
+Stage 1 is not complete. Remaining work includes cursor shape/blink, IME preedit,
+font fallback and drag-selection refinements; actual desktop keyboard/clipboard
+on Windows and Linux X11/Wayland; real vim/nano/top/less/tmux with resize, mouse
+and SSH output/backpressure. Local WSL is not installed and Docker was not found;
+no production host was used as a substitute. Linux CI baseline checks do not
+exercise the Qt renderer. No native user release is being published at this step.

@@ -97,6 +97,8 @@ struct TerminalModel::Impl {
     GhosttyMouseEvent mouseEvent{};
     GhosttySelectionGesture gesture{};
     GhosttySelectionGestureEvent selectionPress{}, selectionDrag{};
+    GhosttySearch search{};
+    bool searchDirty = false, searchLimited = false, searchActive = false;
     bool selecting = false;
     int columns = 80, rowCount = 24, cellWidth = 8, cellHeight = 16;
     QThread* owner = QThread::currentThread();
@@ -153,6 +155,7 @@ struct TerminalModel::Impl {
         catch (...) { self.overflow = true; }
     }
     ~Impl() {
+        ghostty_search_free(search);
         ghostty_selection_gesture_event_free(selectionDrag);
         ghostty_selection_gesture_event_free(selectionPress);
         ghostty_selection_gesture_free(gesture, terminal);
@@ -198,6 +201,7 @@ TerminalModel::TerminalModel(int columns, int rows) : impl_(std::make_unique<Imp
     checked(ghostty_mouse_encoder_new(nullptr, &state.mouseEncoder));
     checked(ghostty_mouse_event_new(nullptr, &state.mouseEvent));
     checked(ghostty_selection_gesture_new(nullptr, &state.gesture));
+    checked(ghostty_search_new(nullptr, &state.search, state.terminal));
     checked(ghostty_selection_gesture_event_new(nullptr, &state.selectionPress, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_PRESS));
     checked(ghostty_selection_gesture_event_new(nullptr, &state.selectionDrag, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DRAG));
     const bool trackCell = true;
@@ -215,6 +219,7 @@ void TerminalModel::feed(const QByteArray& bytes) {
     // generation before use, including a switch and return within one batch.
     ghostty_terminal_vt_write(state.terminal, reinterpret_cast<const std::uint8_t*>(bytes.constData()),
         static_cast<std::size_t>(bytes.size()));
+    state.searchDirty = true;
     checked(ghostty_terminal_get(state.terminal, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &after));
     if (before != after) checked(ghostty_terminal_set(state.terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr));
     // This upstream helper resets motion deduplication. Sync on output/mode
@@ -233,6 +238,7 @@ void TerminalModel::resize(int columns, int rows, int cellWidth, int cellHeight)
         static_cast<std::uint16_t>(rows), static_cast<std::uint32_t>(cellWidth), static_cast<std::uint32_t>(cellHeight)));
     impl_->columns = columns; impl_->rowCount = rows;
     impl_->cellWidth = cellWidth; impl_->cellHeight = cellHeight; impl_->mouseGeometry();
+    impl_->searchDirty = true;
 }
 void TerminalModel::scroll(int lines) {
     impl_->checkOwner();
@@ -303,6 +309,61 @@ std::optional<QString> TerminalModel::selectionText() {
     checked(ghostty_terminal_selection_format_buf(state.terminal, options,
         reinterpret_cast<std::uint8_t*>(bytes.data()), size, &size));
     return QString::fromUtf8(bytes.constData(), static_cast<qsizetype>(size));
+}
+bool TerminalModel::setSearch(const QString& query) {
+    auto& state = *impl_; state.checkOwner();
+    // Reject before conversion so callers cannot force a large temporary copy.
+    if (query.size() > MaximumSearchBytes || !query.isValidUtf16()) return false;
+    const auto bytes = query.toUtf8();
+    if (bytes.size() > MaximumSearchBytes || std::ranges::any_of(query, [](QChar ch) {
+            return ch.unicode() < 0x20 || ch.unicode() == 0x7f;
+        })) return false;
+    const GhosttyString needle{reinterpret_cast<const std::uint8_t*>(bytes.constData()), static_cast<std::size_t>(bytes.size())};
+    checked(ghostty_search_set(state.search, GHOSTTY_SEARCH_OPT_NEEDLE, &needle));
+    state.searchActive = !bytes.isEmpty(); state.searchLimited = false;
+    state.searchDirty = state.searchActive;
+    return true;
+}
+TerminalSearchState TerminalModel::advanceSearch() {
+    auto& state = *impl_; state.checkOwner();
+    TerminalSearchState result; result.limited = state.searchLimited;
+    if (!state.searchActive) return result;
+    GhosttySearchStatus status{};
+    checked(ghostty_search_get(state.search, GHOSTTY_SEARCH_DATA_STATUS, &status));
+    if (state.searchDirty || status == GHOSTTY_SEARCH_STATUS_FEED_REQUIRED) {
+        checked(ghostty_search_feed(state.search)); state.searchDirty = false;
+        checked(ghostty_search_get(state.search, GHOSTTY_SEARCH_DATA_STATUS, &status));
+    }
+    for (int i = 0; i < 4 && status == GHOSTTY_SEARCH_STATUS_RUNNING; ++i)
+        checked(ghostty_search_tick(state.search, &status));
+    checked(ghostty_search_get(state.search, GHOSTTY_SEARCH_DATA_TOTAL_MATCHES, &result.matches));
+    if (result.matches > MaximumSearchMatches) {
+        checked(ghostty_search_set(state.search, GHOSTTY_SEARCH_OPT_NEEDLE, nullptr));
+        state.searchActive = false; state.searchLimited = true;
+        result = {}; result.limited = true; return result;
+    }
+    result.complete = status == GHOSTTY_SEARCH_STATUS_COMPLETE;
+    std::size_t index = 0;
+    const auto selected = ghostty_search_get(state.search, GHOSTTY_SEARCH_DATA_SELECTED_INDEX, &index);
+    if (selected != GHOSTTY_NO_VALUE) { checked(selected); result.selected = index; }
+    return result;
+}
+bool TerminalModel::selectSearchMatch(bool older) {
+    auto& state = *impl_; state.checkOwner();
+    if (!state.searchActive || state.searchDirty) return false;
+    GhosttySearchStatus status{};
+    checked(ghostty_search_get(state.search, GHOSTTY_SEARCH_DATA_STATUS, &status));
+    if (status != GHOSTTY_SEARCH_STATUS_COMPLETE) return false;
+    // The upstream select helper catches up synchronously. Only call it when
+    // incremental work is complete and no terminal write/resize intervened.
+    const auto selected = ghostty_search_set(state.search,
+        older ? GHOSTTY_SEARCH_OPT_SELECT_NEXT : GHOSTTY_SEARCH_OPT_SELECT_PREV, nullptr);
+    if (selected == GHOSTTY_NO_VALUE) return false;
+    checked(selected);
+    auto match = GHOSTTY_INIT_SIZED(GhosttySelection);
+    checked(ghostty_search_get(state.search, GHOSTTY_SEARCH_DATA_SELECTED_MATCH, &match));
+    checked(ghostty_terminal_set(state.terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &match));
+    return true;
 }
 TerminalFrame TerminalModel::frame() {
     auto& state = *impl_; state.checkOwner();
