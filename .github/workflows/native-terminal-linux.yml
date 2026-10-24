@@ -78,3 +78,9 @@ jobs:
       - name: Native physical EN/RU shortcuts and real isolated X11 clipboard
         if: ${{ !cancelled() && steps.adapter_build.outcome == 'success' }}
         run: xvfb-run -a env NORDSSH_ISOLATED_DESKTOP=1 python3 native/tests/x11_input_fixture.py native/build-linux-terminal/terminal_tui_driver
+      - name: Native connection controller and session UI with ASan/UBSan
+        if: ${{ !cancelled() && steps.adapter_build.outcome == 'success' }}
+        env:
+          NORDSSH_QT_PREFIX: ${{ github.workspace }}/qt-sdk
+          NORDSSH_VT_PREFIX: ${{ github.workspace }}/vt-source/zig-out
+        run: bash native/scripts/check-crypto-linux.sh

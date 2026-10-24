@@ -5,7 +5,7 @@
 namespace nordssh::ssh {
 using AttemptId = std::array<std::byte, 16>;
 enum class AttemptPhase { Connecting, HostVerification, Authentication, Active, Closing, Closed, Failed, Rejected };
-enum class AttemptReason { None, Cancelled, Timeout, Network, Protocol, ChangedKey, Rejected, RemoteClosed };
+enum class AttemptReason { None, Cancelled, Timeout, Network, Protocol, ChangedKey, Rejected, RemoteClosed, Authentication };
 struct AttemptTimeouts {
     std::chrono::milliseconds connect{5000}, trust{120000}, authentication{120000};
 };
@@ -34,6 +34,7 @@ public:
     [[nodiscard]] AttemptId id() const;
     [[nodiscard]] AttemptPhase phase() const;
     [[nodiscard]] AttemptReason reason() const;
+    [[nodiscard]] Clock::time_point deadline() const;
     [[nodiscard]] std::stop_token stopToken() const noexcept; // Copy before starting worker.
     // Event methods report a state change, NEVER authorization by themselves.
     bool connected(AttemptId request, const HostIdentity& identity,
@@ -46,6 +47,7 @@ public:
     bool cancel();
     bool workerClosed(AttemptId request);
     bool workerFailed(AttemptId request);
+    bool failed(AttemptId request, AttemptReason reason);
     bool tick(Clock::time_point now = Clock::now());
 private:
     void owner() const;

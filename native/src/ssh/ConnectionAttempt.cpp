@@ -34,6 +34,7 @@ void ConnectionAttempt::owner() const {
 AttemptId ConnectionAttempt::id() const { owner(); return id_; }
 AttemptPhase ConnectionAttempt::phase() const { owner(); return phase_; }
 AttemptReason ConnectionAttempt::reason() const { owner(); return reason_; }
+ConnectionAttempt::Clock::time_point ConnectionAttempt::deadline() const { owner(); return deadline_; }
 std::stop_token ConnectionAttempt::stopToken() const noexcept { return stop_.get_token(); }
 bool ConnectionAttempt::finish(AttemptPhase phase, AttemptReason reason) {
     if (terminal(phase_)) return false;
@@ -109,5 +110,12 @@ bool ConnectionAttempt::workerFailed(AttemptId request) {
     if (request != id_ || terminal(phase_)) return false;
     if (phase_ == AttemptPhase::Closing) return workerClosed(request);
     return finish(AttemptPhase::Failed, AttemptReason::Network);
+}
+bool ConnectionAttempt::failed(AttemptId request, AttemptReason reason) {
+    owner();
+    if (request != id_ || (reason != AttemptReason::Network && reason != AttemptReason::Protocol &&
+        reason != AttemptReason::Timeout && reason != AttemptReason::Authentication)) return false;
+    if (phase_ == AttemptPhase::Closing) return workerClosed(request);
+    return finish(AttemptPhase::Failed, reason);
 }
 } // namespace nordssh::ssh

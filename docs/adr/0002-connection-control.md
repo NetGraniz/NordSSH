@@ -3,6 +3,10 @@
 Date: 2026-10-24. Status: implemented engineering substrate, not a finished
 ConnectionManager or a user-facing SSH connection flow.
 
+The subsequent controller/session UI is recorded in
+[ADR 0003](0003-native-session-controller.md); pending-integration notes below
+describe this substrate's original scope.
+
 ## Worker operations
 
 The libssh session has one worker owner. Wire operations use nonblocking mode

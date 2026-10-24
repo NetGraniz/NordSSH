@@ -32,13 +32,23 @@ cmake --build "$task_root/libssh-build" --parallel 2
 cmake --install "$task_root/libssh-build"
 python3 -m venv "$task_root/test-python"
 "$task_root/test-python/bin/python" -m pip install --disable-pip-version-check 'asyncssh==2.24.1' 'bcrypt==5.0.0'
+task_extra_cmake=()
+task_prefix_path="$task_root/libssh-prefix"
+if [[ -n "${NORDSSH_QT_PREFIX:-}" ]]; then
+  task_prefix_path="$task_prefix_path;$NORDSSH_QT_PREFIX"
+  task_extra_cmake+=(-DNORDSSH_BUILD_RESOLVER=ON -DNORDSSH_BUILD_CONNECTIONS=ON)
+fi
+if [[ -n "${NORDSSH_VT_PREFIX:-}" ]]; then
+  test -n "${NORDSSH_QT_PREFIX:-}"
+  task_extra_cmake+=(-DNORDSSH_BUILD_TERMINAL=ON -DNORDSSH_BUILD_SESSION_UI=ON "-DNORDSSH_GHOSTTY_SDK=$NORDSSH_VT_PREFIX")
+fi
 cmake -S native -B native/build-crypto-ci -DCMAKE_BUILD_TYPE=Debug \
   -DNORDSSH_BUILD_CRYPTO=ON -DOPENSSL_ROOT_DIR="$task_root/prefix" \
-  -DNORDSSH_BUILD_SSH=ON -DCMAKE_PREFIX_PATH="$task_root/libssh-prefix" \
+  -DNORDSSH_BUILD_SSH=ON -DCMAKE_PREFIX_PATH="$task_prefix_path" "${task_extra_cmake[@]}" \
   -DPython3_EXECUTABLE="$task_root/test-python/bin/python" \
   -DCMAKE_C_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
   -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
   -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
 cmake --build native/build-crypto-ci --parallel 2
-LD_LIBRARY_PATH="$task_root/libssh-prefix/lib:$task_root/prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+QT_QPA_PLATFORM=offscreen LD_LIBRARY_PATH="$task_root/libssh-prefix/lib:$task_root/prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   ctest --test-dir native/build-crypto-ci --output-on-failure

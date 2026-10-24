@@ -7,6 +7,13 @@
 > and [ADR 0001](docs/adr/0001-native-client.md). The sections below describe the
 > prototype; they are not a completion report for the native rewrite.
 
+The native engineering build now connects real SSH sessions through Qt Widgets
+tabs with in-app host verification and a raster terminal. Its controller supports
+passwords and in-memory keys; vault/SFTP/distribution work is still pending.
+Build scope and test evidence: [native/README.md](native/README.md) and
+[NATIVE_PROGRESS.md](docs/NATIVE_PROGRESS.md). Do not use old beta downloads as
+the native release.
+
 Local SSH and SFTP client for Windows and Linux. No cloud account, vault sync
 service or subscription. Version `0.1.0` adds installers and signed updates to
 the earlier portable beta.

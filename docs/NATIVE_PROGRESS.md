@@ -770,3 +770,45 @@ must share the same connect deadline. Consume host approval only through the
 existing one-shot lifecycle gate and Session::authorizeHost. Native trust/auth
 dialogs, retry/2FA/keepalive remain pending. No installer or native client release
 was published by this increment, and no user testing is requested yet.
+
+## 2026-10-24: end-to-end native connection controller and session UI
+
+Started from clean main bf4d77e with verified NetGraniz/NordSSH origin and a
+successful git pull --ff-only. Implemented ConnectionManager/ConnectionRuntime:
+canonical asynchronous DNS, shared connect budget, sequential address fallback,
+one-shot trust gating, password/encrypted-key commands, real PTY/shell, coalesced
+resize and bounded byte delivery. An application runtime reserves at most 16
+attempts before DNS and retains cancelled workers after tab destruction. No
+worker callback captures a tab. Normal shutdown is asynchronous; only final
+runtime destruction has an emergency blocking fallback. See ADR 0003.
+
+Built a real Qt Widgets nordssh_native engineering executable with a connection
+bar, tabs, inline PlainText host fingerprint controls, masked password entry and
+the actual VT terminal. Trust is per connection, not falsely saved. The pane
+has bounded frame draining and consumes final output after EOF. Its paste path
+was verified through the real SSH connection with Cyrillic bytes exactly once.
+The current pane has password controls; key/certificate support is an in-memory
+controller API, not a completed key/vault selection screen.
+
+The initial complete Windows Debug regression passed **23/23 in 90.99 s**.
+After adding reconnect/EOF/flood cases, connection_manager passed **17 modes in
+50.52 s**. Native connection_pane passed **four modes in 15.39 s**, including
+large final output/VT query after EOF and active tab destruction. Headless
+screenshots were inspected: Windows offscreen QPA required explicitly loading
+installed test fonts; no replacement renderer or product font workaround was
+introduced. Trust/auth panels retain their layout height, with the fingerprint
+visible. Final terminal output included final-marker after 40,000 synthetic lines.
+
+Debug tests exposed and fixed a completion-snapshot ordering bug, and tests now
+wait for a processed terminal outcome before calling a connection settled.
+The encrypted-key fixture initially exported unsupported AES-CBC; it correctly
+failed admission and was changed to the already supported AES-256-CTR, without
+loosening product key checks. The native paste fixture now expects VT's LF-to-CR
+encoding rather than byte-preserving a newline outside bracketed paste.
+
+Extended Linux engineering CI to build the full Qt/SSH/session UI stack under
+ASan/UBSan using the existing exact pins. Final platform execution results follow
+after the push. This increment does not read production hosts, Minecraft data,
+prototype vaults, backups or signing keys. No installer/native user release was
+published: vault persistence/trust UI, keyboard-interactive/2FA, keepalive,
+forwarding/jump hosts, SFTP, snippets and verified distribution remain required.

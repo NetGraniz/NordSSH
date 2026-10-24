@@ -1,10 +1,21 @@
 # NordSSH native engineering workspace
 
-This is the new C++20 implementation. There is no runnable SSH application or
-native user release here yet. The web prototype lives outside this directory and
-is not used by these targets.
+This is the new C++20 implementation. An engineering native SSH application now
+builds from these sources, but there is no native user release/installer yet.
+Vault persistence, SFTP and other required product features remain incomplete.
+The web prototype lives outside this directory and is not used by these targets.
 
 Current product modules:
+
+- `nordssh_connections`: asynchronous DNS/connect/trust/auth/shell controller and
+  app-owned worker registry. Bounded command slots, coalesced resize, 16-attempt
+  admission and nonblocking tab close. `NORDSSH_BUILD_CONNECTIONS=ON` requires
+  SSH and resolver components. See [ADR 0003](../docs/adr/0003-native-session-controller.md).
+- `nordssh_session_ui` / `nordssh_native`: optional Qt Widgets application slice
+  with connection inputs, tabs, in-app host verification, password login and real
+  terminal. Enable `NORDSSH_BUILD_SESSION_UI=ON` with connections and terminal.
+  It does not save trust/hosts/secrets or read old prototype data. It is not a
+  deployable runtime bundle or a replacement for the full release checklist.
 
 - `nordssh_vault_format`: bounded UTF-8 password and binary-header admission,
   exact AAD construction, plus bounded authenticated JSON structural admission.
