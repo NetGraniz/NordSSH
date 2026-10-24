@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
         clock.restart();
         while (!count->text().contains("of 2") && clock.elapsed() < 2000) QTest::qWait(10);
         require(count->text() == "1 of 2" && sent.isEmpty(), "Find shortcut/query never reach SSH");
-        auto* timer = widget.findChild<QTimer*>();
+        auto* timer = widget.findChild<QTimer*>("terminalSearchTimer");
         require(timer && timer->isActive(), "Live nonempty query timer active");
         widget.hide(); require(!timer->isActive(), "Hidden terminal stops search timer");
         widget.show(); app.processEvents(); require(timer->isActive(), "Showing terminal resumes live query");

@@ -134,3 +134,17 @@ an individual engine step can transiently exceed that count. Empty/limited
 searches and hidden tabs do not keep the UI timer running. Only the selected
 match is highlighted; highlight-all, regex and Unicode case folding are not
 implemented. Synthetic offscreen tests do not prove native desktop acceptance.
+
+`terminal_presentation` checks DECSCUSR block/bar/underline cursors, blink and
+steady modes, cursor color, bounded local IME composition/cancel/commit and
+font fallback with a real CJK glyph. No remote surrounding text is supplied to
+the input method. The test requires an installed CJK fallback font; Linux CI
+installs fonts-noto-cjk. Actual OS input-method interactions remain separate.
+
+`NORDSSH_BUILD_TUI_TESTS=ON` additionally builds a test-only framed stdin driver.
+On Linux, `terminal_real_tui` runs real vim/nano/less/top/tmux on disposable PTYs,
+feeding output through the Qt raster adapter and checking editor saves/navigation
+and resize. It uses temporary HOME/config/file state, never production SSH or
+user profiles. The manual Native Linux terminal engineering workflow repeats
+the scenarios with offscreen, xcb/Xvfb and Wayland/headless Weston. This driver
+is not a product subprocess backend or a physical keyboard/clipboard test.

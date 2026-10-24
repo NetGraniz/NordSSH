@@ -2,6 +2,7 @@
 #include "TerminalModel.h"
 #include <QWidget>
 #include <functional>
+#include <QTextLayout>
 class QFrame;
 class QLabel;
 class QLineEdit;
@@ -40,6 +41,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent*) override;
     void mouseMoveEvent(QMouseEvent*) override;
     void focusOutEvent(QFocusEvent*) override;
+    void focusInEvent(QFocusEvent*) override;
     void inputMethodEvent(QInputMethodEvent*) override;
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 private:
@@ -55,6 +57,8 @@ private:
     void searchMove(bool older);
     void followOutput();
     void mouseInput(QMouseEvent*);
+    void updateCursorBlink();
+    void paintPreedit(QPainter& painter);
     TerminalModel model_;
     TerminalFrame frame_;
     int cellWidth_ = 9, cellHeight_ = 18, baseline_ = 14;
@@ -79,5 +83,10 @@ private:
     QLabel* searchCount_ = nullptr;
     QPushButton *searchOlder_ = nullptr, *searchNewer_ = nullptr;
     QTimer* searchTimer_ = nullptr;
+    QTimer* cursorTimer_ = nullptr;
+    bool cursorPhase_ = true, preeditCursorVisible_ = true;
+    QString preedit_;
+    int preeditCursor_ = 0;
+    QList<QTextLayout::FormatRange> preeditFormats_;
 };
 } // namespace nordssh

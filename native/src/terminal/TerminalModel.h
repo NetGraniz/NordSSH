@@ -13,6 +13,7 @@ class QMouseEvent;
 class QWheelEvent;
 
 namespace nordssh {
+enum class TerminalCursorShape { Bar, Block, Underline, Hollow };
 struct TerminalCell {
     QString text;
     QColor foreground, background;
@@ -25,6 +26,9 @@ struct TerminalFrame {
     QVector<TerminalCell> cells;
     QColor background;
     bool cursorVisible = false;
+    bool cursorBlink = false, cursorWideTail = false, passwordInput = false;
+    TerminalCursorShape cursorShape = TerminalCursorShape::Block;
+    QColor cursorColor{115, 210, 150};
     bool followingOutput = true, mouseTracking = false;
     int cursorX = 0, cursorY = 0;
 };

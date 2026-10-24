@@ -551,3 +551,38 @@ on Windows and Linux X11/Wayland; real vim/nano/top/less/tmux with resize, mouse
 and SSH output/backpressure. Local WSL is not installed and Docker was not found;
 no production host was used as a substitute. Linux CI baseline checks do not
 exercise the Qt renderer. No native user release is being published at this step.
+
+## Stage 1 continuation: cursor, composition and Linux fixture, 2026-10-24
+
+Added DECSCUSR cursor shape/blink mapping, effective OSC cursor color and focused
+block/bar/underline raster rendering, with a hollow unfocused cursor. Blink
+timers stop in hidden/unfocused terminals and for steady cursor modes. The model
+does not read undefined viewport cursor coordinates when the cursor is hidden.
+
+IME preedit now renders locally through bounded QTextLayout (1,024 UTF-16 units,
+64 inspected attributes), with cursor/solid color/underline attributes. A commit
+uses the existing single terminal input route. Oversized/invalid text and remote
+surrounding-document replacement requests are refused without inventing remote
+Backspace edits. Surrounding text/selection queries return empty values rather
+than exposing remote output to an input method. Physical IME acceptance remains
+separate. Qt's font merging is exercised with a real installed CJK fallback, not
+merely a replacement-box screenshot.
+
+Local Windows combined CTest passed **15/15 in 29.63 s**. New deterministic tests
+check six cursor styles, blink raster phases, hidden timers, composition/cancel,
+commit limits, surrounding-text privacy and real CJK glyph support. The test-only
+TUI driver also compiles on Windows; Linux PTY scenarios have not run yet.
+
+Added a manual Linux Qt engineering workflow with temporary PTYs and real
+vim/nano/less/top/tmux scenarios. Each program receives the adapter's keyboard,
+paste, terminal replies and resize; editor files are checked after save. It
+also requests real Qt xcb and Wayland QPA raster paths through Xvfb and headless
+Weston. These synthetic input events are not physical keyboard/clipboard tests,
+and local PTY compatibility is not SSH transport/cancellation evidence. The test
+driver is not linked into or shipped as an application backend.
+
+Qt Linux 6.12.0 base/Wayland/ICU archive SHA256 pins are recorded separately in
+qt-linux-engineering.lock.json after two separately hosted Qt mirror downloads
+and comparison with published SHA1. This is first-acquisition evidence, not a
+publisher signature, reproducible distro toolchain or product packaging approval.
+The new workflow must pass before claiming any Linux Qt/TUI success.

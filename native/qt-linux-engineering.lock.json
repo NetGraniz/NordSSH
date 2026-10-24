@@ -1,0 +1,34 @@
+{
+  "purpose": "Pinned Linux Qt acquisition for isolated terminal engineering CI, not product/release approval",
+  "version": "6.12.0",
+  "packageVersion": "6.12.0-0-202609280346",
+  "metadataSha256": "615f617ad82e9c9b50e339ce19eb340901919ea29386a93843be236cb77ca5a7",
+  "trust": "Locally computed first-acquisition SHA256; published SHA1 and second separately hosted Qt mirror matched on 2026-10-24. Mirrors may share upstream provenance; no publisher signature or full security audit is implied.",
+  "mirrors": [
+    "https://ftp.fau.de/qtproject/online/qtsdkrepository/linux_x64/desktop/qt6_6120/qt6_6120/qt.qt6.6120.linux_gcc_64/",
+    "https://qt.mirror.constant.com/online/qtsdkrepository/linux_x64/desktop/qt6_6120/qt6_6120/qt.qt6.6120.linux_gcc_64/"
+  ],
+  "archives": [
+    {
+      "file": "6.12.0-0-202609280346qtbase-Linux-RHEL_9_6-GCC-Linux-RHEL_9_6-X86_64.7z",
+      "bytes": 23729678,
+      "sha256": "943023b929d0c08eafe7341700b5ed7601284410b7afd6093f950be291d1d7cd",
+      "publishedSha1": "ee66bceaaee64df0b068d64191046fa0dbea91b1",
+      "subdirectory": "."
+    },
+    {
+      "file": "6.12.0-0-202609280346qtwayland-Linux-RHEL_9_6-GCC-Linux-RHEL_9_6-X86_64.7z",
+      "bytes": 132690,
+      "sha256": "14c0dc4c8147cf9f7f64909b27ae5c9ab2aaa8ad6625bc2248c693c2a327ab5b",
+      "publishedSha1": "ac659f6ba937eda343dba3084340145b3c61b84d",
+      "subdirectory": "."
+    },
+    {
+      "file": "6.12.0-0-202609280346icu-linux-Rhel8.6-x86_64.7z",
+      "bytes": 9660660,
+      "sha256": "1fdbcd67b1760f3a3f031c64637a9f19992aed2f35aa615e12a468f8c655d4da",
+      "publishedSha1": "e8ca1caa798c902eb6bf1aab81a3ea52b6f16714",
+      "subdirectory": "lib"
+    }
+  ]
+}

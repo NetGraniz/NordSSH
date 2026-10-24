@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
+#include <QFocusEvent>
 #include <QKeyEvent>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -72,6 +73,13 @@ TerminalWidget::TerminalWidget(QWidget* parent) : QWidget(parent) {
         return result == QMessageBox::Yes;
     };
     pasteRouter_ = new PasteRouter(this, [this] { paste(); });
+    cursorTimer_ = new QTimer(this);
+    cursorTimer_->setObjectName("terminalCursorTimer");
+    cursorTimer_->setInterval(std::max(100, QApplication::cursorFlashTime() / 2));
+    connect(cursorTimer_, &QTimer::timeout, this, [this] {
+        updateCursorBlink();
+        if (cursorTimer_->isActive()) { cursorPhase_ = !cursorPhase_; update(); }
+    });
     frame_ = model_.frame();
 }
 void TerminalWidget::setSend(std::function<void(const QByteArray&)> send) { send_ = std::move(send); }
@@ -106,7 +114,7 @@ void TerminalWidget::openSearch() {
         for (auto* button : {searchOlder_, searchNewer_, close}) button->installEventFilter(this);
         layout->addWidget(searchInput_, 1); layout->addWidget(searchCount_);
         layout->addWidget(searchOlder_); layout->addWidget(searchNewer_); layout->addWidget(close);
-        searchTimer_ = new QTimer(this); searchTimer_->setInterval(40);
+        searchTimer_ = new QTimer(this); searchTimer_->setObjectName("terminalSearchTimer"); searchTimer_->setInterval(40);
         connect(searchTimer_, &QTimer::timeout, this, [this] { searchStep(); });
         connect(searchInput_, &QLineEdit::textChanged, this, [this](const QString& text) {
             QPointer<TerminalWidget> self(this);
@@ -205,6 +213,7 @@ void TerminalWidget::feed(const QByteArray& bytes) {
     QPointer<TerminalWidget> self(this);
     try {
         model_.feed(bytes); frame_ = model_.frame(); update();
+        updateCursorBlink();
         flush(); // Last: callback may close the tab.
     } catch (...) { if (self) self->fail(); }
 }
@@ -212,6 +221,8 @@ TerminalFrame TerminalWidget::snapshot() { return frame_; }
 bool TerminalWidget::event(QEvent* event) {
     // Inactive tabs must not wake every 40 ms merely because find was open.
     if (event->type() == QEvent::Hide && searchTimer_) searchTimer_->stop();
+    if (event->type() == QEvent::Hide && cursorTimer_) cursorTimer_->stop();
+    if (event->type() == QEvent::Show && cursorTimer_) updateCursorBlink();
     if (event->type() == QEvent::Show && searchTimer_ && searchBar_ &&
         !searchBar_->isHidden() && !searchInput_->text().isEmpty()) searchTimer_->start();
     if (event->type() == QEvent::ShortcutOverride) {
@@ -258,10 +269,53 @@ void TerminalWidget::paintEvent(QPaintEvent*) {
             painter.restore();
         }
     }
-    if (frame_.cursorVisible) {
-        painter.setPen(QColor(115, 210, 150));
-        painter.drawRect(frame_.cursorX * cellWidth_, frame_.cursorY * cellHeight_, cellWidth_ - 1, cellHeight_ - 1);
+    if (frame_.cursorVisible && preedit_.isEmpty() && (cursorPhase_ || !hasFocus())) {
+        int x = frame_.cursorX;
+        if (frame_.cursorWideTail && x > 0) --x;
+        const auto& cell = frame_.cells[frame_.cursorY * frame_.columns + x];
+        const int span = cell.width == 2 ? 2 : 1;
+        const QRect area(x * cellWidth_, frame_.cursorY * cellHeight_, span * cellWidth_, cellHeight_);
+        const auto shape = hasFocus() ? frame_.cursorShape : TerminalCursorShape::Hollow;
+        painter.setPen(frame_.cursorColor);
+        if (shape == TerminalCursorShape::Hollow) painter.drawRect(area.adjusted(0, 0, -1, -1));
+        else if (shape == TerminalCursorShape::Bar) painter.fillRect(area.x(), area.y(), 2, area.height(), frame_.cursorColor);
+        else if (shape == TerminalCursorShape::Underline) painter.fillRect(area.x(), area.bottom() - 1, area.width(), 2, frame_.cursorColor);
+        else {
+            painter.fillRect(area, frame_.cursorColor);
+            if (!cell.invisible && !cell.text.isEmpty()) {
+                auto glyphFont = font(); glyphFont.setBold(cell.bold); glyphFont.setItalic(cell.italic);
+                glyphFont.setUnderline(cell.underline); glyphFont.setStrikeOut(cell.strike);
+                painter.setFont(glyphFont); painter.setPen(cell.background);
+                painter.save(); painter.setClipRect(area);
+                painter.drawText(QPoint(area.x(), area.y() + baseline_), cell.text); painter.restore();
+            }
+        }
     }
+    paintPreedit(painter);
+}
+void TerminalWidget::updateCursorBlink() {
+    if (!cursorTimer_) return;
+    const bool blink = !failed_ && isVisible() && hasFocus() && frame_.cursorVisible &&
+        frame_.cursorBlink && preedit_.isEmpty() && QApplication::cursorFlashTime() > 0;
+    if (!blink) { cursorTimer_->stop(); cursorPhase_ = true; }
+    else if (!cursorTimer_->isActive()) { cursorPhase_ = true; cursorTimer_->start(); }
+}
+void TerminalWidget::paintPreedit(QPainter& painter) {
+    if (preedit_.isEmpty() || !frame_.cursorVisible || !hasFocus()) return;
+    QTextLayout layout(preedit_, font());
+    QTextOption option; option.setWrapMode(QTextOption::NoWrap); layout.setTextOption(option);
+    layout.setFormats(preeditFormats_);
+    layout.beginLayout(); auto line = layout.createLine();
+    line.setLineWidth(frame_.columns * cellWidth_); layout.endLayout();
+    const qreal y = frame_.cursorY * cellHeight_;
+    const qreal x = std::min<qreal>(frame_.cursorX * cellWidth_,
+        std::max<qreal>(0, frame_.columns * cellWidth_ - line.naturalTextWidth()));
+    const QRectF clip(0, y, frame_.columns * cellWidth_, cellHeight_);
+    painter.save(); painter.setClipRect(clip);
+    painter.fillRect(QRectF(x, y, std::min<qreal>(line.naturalTextWidth() + 2, width()), cellHeight_), frame_.background);
+    painter.setPen(palette().color(QPalette::Text)); layout.draw(&painter, {x, y});
+    if (preeditCursorVisible_) layout.drawCursor(&painter, {x, y}, preeditCursor_, 2);
+    painter.restore();
 }
 void TerminalWidget::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
@@ -446,6 +500,7 @@ void TerminalWidget::mouseDoubleClickEvent(QMouseEvent* event) { mouseInput(even
 void TerminalWidget::mouseReleaseEvent(QMouseEvent* event) { mouseInput(event); }
 void TerminalWidget::mouseMoveEvent(QMouseEvent* event) { mouseInput(event); }
 void TerminalWidget::focusOutEvent(QFocusEvent* event) {
+    preedit_.clear(); preeditFormats_.clear(); updateCursorBlink(); update();
     model_.endSelection(); localSelection_ = false;
     // Keep local-release suppression if focus changes while a navigation key
     // is held. A subsequent nonlocal press explicitly replaces that state.
@@ -460,6 +515,9 @@ void TerminalWidget::focusOutEvent(QFocusEvent* event) {
         if (!self) return;
     }
     QWidget::focusOutEvent(event);
+}
+void TerminalWidget::focusInEvent(QFocusEvent* event) {
+    QWidget::focusInEvent(event); updateCursorBlink(); update();
 }
 void TerminalWidget::paste() {
     if (failed_ || !send_ || !readPaste_) return;
@@ -484,9 +542,40 @@ void TerminalWidget::paste() {
 }
 void TerminalWidget::inputMethodEvent(QInputMethodEvent* event) {
     event->accept();
-    if (failed_ || event->commitString().isEmpty()) return;
+    if (failed_) return;
     QPointer<TerminalWidget> self(this);
     try {
+        preedit_.clear(); preeditFormats_.clear(); preeditCursor_ = 0; preeditCursorVisible_ = true;
+        const auto& composing = event->preeditString();
+        if (composing.size() <= 1024 && composing.isValidUtf16() &&
+            std::ranges::none_of(composing, [](QChar ch) { return ch.unicode() < 0x20 || ch.unicode() == 0x7f; })) {
+            preedit_ = composing; preeditCursor_ = static_cast<int>(composing.size());
+            QTextCharFormat base; base.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+            preeditFormats_.append({0, static_cast<int>(composing.size()), base});
+            int count = 0;
+            for (const auto& attribute : event->attributes()) {
+                if (++count > 64) break;
+                if (attribute.type == QInputMethodEvent::Cursor) {
+                    preeditCursor_ = std::clamp(attribute.start, 0, static_cast<int>(composing.size()));
+                    preeditCursorVisible_ = attribute.length != 0;
+                } else if (attribute.type == QInputMethodEvent::TextFormat && attribute.value.canConvert<QTextFormat>()) {
+                    const int start = std::clamp(attribute.start, 0, static_cast<int>(composing.size()));
+                    const int length = std::clamp(attribute.length, 0, static_cast<int>(composing.size()) - start);
+                    const auto incoming = attribute.value.value<QTextFormat>().toCharFormat();
+                    QTextCharFormat format;
+                    if (incoming.foreground().style() == Qt::SolidPattern) format.setForeground(incoming.foreground());
+                    if (incoming.background().style() == Qt::SolidPattern) format.setBackground(incoming.background());
+                    format.setUnderlineStyle(incoming.underlineStyle());
+                    preeditFormats_.append({start, length, format});
+                }
+            }
+        }
+        updateCursorBlink(); update();
+        // A remote terminal has no locally editable surrounding document.
+        // Never translate IME replacement requests into guessed Backspaces.
+        if (event->replacementStart() != 0 || event->replacementLength() != 0 ||
+            event->commitString().isEmpty() || event->commitString().size() > TerminalModel::MaximumPaste ||
+            !event->commitString().isValidUtf16()) return;
         // IME commits are text, not a second key/paste-shortcut event. Reuse
         // terminal text sanitization without adding an Enter of our own.
         const auto text = event->commitString().toUtf8();
@@ -495,6 +584,10 @@ void TerminalWidget::inputMethodEvent(QInputMethodEvent* event) {
     } catch (...) { if (self) self->fail(); }
 }
 QVariant TerminalWidget::inputMethodQuery(Qt::InputMethodQuery query) const {
+    if (query == Qt::ImSurroundingText || query == Qt::ImCurrentSelection) return QString{};
+    if (query == Qt::ImCursorPosition || query == Qt::ImAnchorPosition) return 0;
+    if (query == Qt::ImHints) return QVariant::fromValue(Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase |
+        (frame_.passwordInput ? Qt::ImhSensitiveData | Qt::ImhHiddenText : Qt::ImhNone));
     if (query == Qt::ImCursorRectangle)
         return QRect(frame_.cursorX * cellWidth_, frame_.cursorY * cellHeight_, cellWidth_, cellHeight_);
     return QWidget::inputMethodQuery(query);

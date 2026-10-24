@@ -384,7 +384,22 @@ TerminalFrame TerminalModel::frame() {
     auto cursor = GHOSTTY_INIT_SIZED(GhosttyRenderStateCursor);
     checked(ghostty_render_state_get(state.render, GHOSTTY_RENDER_STATE_DATA_CURSOR, &cursor));
     frame.cursorVisible = cursor.visible && cursor.viewport_has_value;
-    if (frame.cursorVisible) { frame.cursorX = cursor.viewport_x; frame.cursorY = cursor.viewport_y; }
+    frame.cursorBlink = cursor.blinking; frame.passwordInput = cursor.password_input;
+    switch (cursor.visual_style) {
+    case GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BAR: frame.cursorShape = TerminalCursorShape::Bar; break;
+    case GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK: frame.cursorShape = TerminalCursorShape::Block; break;
+    case GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_UNDERLINE: frame.cursorShape = TerminalCursorShape::Underline; break;
+    case GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK_HOLLOW: frame.cursorShape = TerminalCursorShape::Hollow; break;
+    default: throw std::runtime_error("Unknown terminal cursor shape");
+    }
+    GhosttyColorRgb cursorColor{};
+    const auto cursorResult = ghostty_terminal_get(state.terminal, GHOSTTY_TERMINAL_DATA_COLOR_CURSOR, &cursorColor);
+    if (cursorResult == GHOSTTY_SUCCESS) frame.cursorColor = color(cursorColor);
+    else if (cursorResult != GHOSTTY_NO_VALUE) checked(cursorResult);
+    if (frame.cursorVisible) {
+        frame.cursorX = cursor.viewport_x; frame.cursorY = cursor.viewport_y;
+        frame.cursorWideTail = cursor.wide_tail;
+    }
     checked(ghostty_render_state_get(state.render, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &state.rows));
     int y = 0;
     std::size_t remainingTextBytes = 1024 * 1024;
