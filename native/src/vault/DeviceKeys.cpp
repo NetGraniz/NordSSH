@@ -18,7 +18,7 @@
 namespace nordssh::vault {
 namespace {
 void check(const QString& identity) {
-    static const QRegularExpression pattern(QStringLiteral("^[a-f0-9]{64}$"));
+    static const QRegularExpression pattern(QStringLiteral("\\A[a-f0-9]{64}\\z"));
     if (!pattern.match(identity).hasMatch() || (QCoreApplication::instance() && QThread::currentThread() == QCoreApplication::instance()->thread())) throw DeviceError();
 }
 #ifdef _WIN32

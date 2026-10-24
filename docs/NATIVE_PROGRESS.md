@@ -927,3 +927,9 @@ scheme labels as pin identities and retains Session's SHA-1-excluding negotiatio
 policy. The real OpenSSH fixture now uses a 2048-bit RSA host key with ONLY
 rsa-sha2-512/256 host algorithms; Ed25519 hosts remain covered by all loopback
 fixtures. This checks the distinction without enabling a SHA-1 fallback.
+
+Boundary regression found that PCRE `$` admits a match before a final newline.
+A red test reproduced the PrivateFiles basename admission; strict `\A...\z`
+anchors now guard filenames and device identities. Windows persistence/device
+tests passed **2/2 in 2.86 s** after the fix. Tests contain only fresh synthetic
+data; no existing user's vault, backup or OS keyring item was inspected.

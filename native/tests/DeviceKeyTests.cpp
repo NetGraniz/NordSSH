@@ -12,6 +12,10 @@ int main(int argc, char** argv) {
     if (!temp.isValid()) return 1;
     auto task = std::async(std::launch::async, [&] {
         VaultService service(QDir(temp.path()).filePath("synthetic-device"));
+        bool badIdentity=false;
+        try {(void)DeviceKeys(service.files()).lookup(QString(64,QChar('a'))+'\n');}
+        catch(const DeviceError&) {badIdentity=true;}
+        require(badIdentity);
         const auto first = service.create("synthetic-password");
         service.rememberDevice(); service.lock();
         require(service.unlockRemembered(first));

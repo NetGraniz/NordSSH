@@ -93,6 +93,7 @@ int main(int argc, char** argv) {
         require(service.files().read(second) == secondInitial);
         reject([&] { (void)service.files().path("../escape"); });
         reject([&] { (void)service.files().path("name/escape"); });
+        reject([&] { (void)service.files().path("bad\n"); });
         service.unlock(first, "first-pass"); require(service.document().groups.size() == 1);
         service.lock(); reject([&] { (void)service.document(); });
         // Regular file replacing a vault is never silently treated as empty.

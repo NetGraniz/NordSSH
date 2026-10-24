@@ -137,7 +137,7 @@ void PrivateFiles::checkDirectory() const {
     verifyPrivate(directory_, true);
 }
 QString PrivateFiles::path(const QString& name) const {
-    static const QRegularExpression pattern(QStringLiteral("^[a-z0-9][a-z0-9.-]{0,119}$"));
+    static const QRegularExpression pattern(QStringLiteral("\\A[a-z0-9][a-z0-9.-]{0,119}\\z"));
     if (!pattern.match(name).hasMatch() || name.contains(QStringLiteral(".."))) fail();
     return QDir(directory_).filePath(name);
 }
