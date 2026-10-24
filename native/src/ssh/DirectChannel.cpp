@@ -16,8 +16,8 @@ std::size_t DirectChannel::read(std::span<std::byte> bytes) {
     session_.require(Session::State::Service);
     if (bytes.empty() || bytes.size() > 16384) throw SessionError();
     const auto result = ssh_channel_read_nonblocking(channel_,bytes.data(),static_cast<std::uint32_t>(bytes.size()),0);
-    if (result == SSH_AGAIN) return 0;
-    if (result < 0) throw SessionError();
+    if (result == SSH_AGAIN || result == SSH_EOF) return 0;
+    if (result < 0 || static_cast<std::size_t>(result) > bytes.size()) throw SessionError();
     return static_cast<std::size_t>(result);
 }
 std::size_t DirectChannel::write(std::span<const std::byte> bytes) {
@@ -26,7 +26,7 @@ std::size_t DirectChannel::write(std::span<const std::byte> bytes) {
     if (!session_.flushSome()) return 0;
     const auto result = ssh_channel_write(channel_,bytes.data(),static_cast<std::uint32_t>(bytes.size()));
     if (result == SSH_AGAIN) return 0;
-    if (result < 0) throw SessionError();
+    if (result < 0 || static_cast<std::size_t>(result) > bytes.size()) throw SessionError();
     return static_cast<std::size_t>(result);
 }
 bool DirectChannel::sendEof() {

@@ -910,3 +910,12 @@ ordinary modules but failed the first real OpenSSH basic mode; added phase and
 synthetic sshd diagnostics rather than weakening authentication/trust checks.
 Actual CI-only 128 KiB tmpfs full-disk rollback and Unix permission-denied rename
 tests are added for the next run. They do not fill the runner's real filesystem.
+
+Linux 40106727928 passed **28/29** full-stack sanitizer tests, including all eight
+SFTP modes, actual 128 KiB full-disk recovery (12.31 s), and the real permission
+rename failure. Real OpenSSH diagnostics confirm successful key authentication
+and SFTP transfer/CRUD, then failure on the separate direct-forward connection.
+Pinned libssh channels.c returns SSH_EOF from read_nonblocking after normal EOF;
+the new DirectChannel omitted this case, while the established shell reader
+already handled it. Fixed the direct-channel EOF case and added defensive result
+bounds; real OpenSSH is rerun before accepting the stage.

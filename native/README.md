@@ -2,7 +2,8 @@
 
 This is the new C++20 implementation. An engineering native SSH application now
 builds from these sources, but there is no native user release/installer yet.
-Vault persistence, SFTP and other required product features remain incomplete.
+Vault/data, SFTP and tunnel modules now exist as worker/controller APIs. Complete
+product UI flows, installation and updates are still separate release gates.
 The web prototype lives outside this directory and is not used by these targets.
 
 Current product modules:
@@ -11,6 +12,20 @@ Current product modules:
   app-owned worker registry. Bounded command slots, coalesced resize, 16-attempt
   admission and nonblocking tab close. `NORDSSH_BUILD_CONNECTIONS=ON` requires
   SSH and resolver components. See [ADR 0003](../docs/adr/0003-native-session-controller.md).
+  Keyboard-interactive uses bounded one-shot challenges; keepalive sends encrypted
+  transport activity, not shell commands. LocalForwarder/JumpConnection provide
+  loopback listeners, bounded streams and independent jump/destination trust.
+- `nordssh_data`: typed record/reference admission and worker-owned VaultService,
+  private atomic persistence, independent vaults, lock/leases, encrypted
+  predecessor/export/import, optional current-user DPAPI or Linux Secret Service.
+  `NORDSSH_BUILD_DATA=ON` requires SSH/resolver; Linux additionally needs libsecret
+  development files. The native UI does not expose these flows yet. See
+  [ADR 0004](../docs/adr/0004-vault-service.md).
+- `nordssh_transfers`: a dedicated authenticated service session, bounded job and
+  progress mailboxes, SFTP navigation/CRUD and file/tree upload/download. Staging
+  and explicit overwrite preserve complete files; a lost commit acknowledgement
+  is reported as uncertain, not silently retried. `NORDSSH_BUILD_TRANSFERS=ON`
+  requires data/connections. See [ADR 0005](../docs/adr/0005-transfers-and-tunnels.md).
 - `nordssh_session_ui` / `nordssh_native`: optional Qt Widgets application slice
   with connection inputs, tabs, in-app host verification, password login and real
   terminal. Enable `NORDSSH_BUILD_SESSION_UI=ON` with connections and terminal.
@@ -21,9 +36,9 @@ Current product modules:
   exact AAD construction, plus bounded authenticated JSON structural admission.
   The scanner rejects decoded duplicate keys, invalid Unicode/grammar, unknown
   root fields/types and the format's numeric/container/resource-limit violations
-  before a future DOM/model exists. Only the empty schema-1 document has a complete
-  record contract; nonempty records/settings are explicitly marked unreviewed.
-  This is not a saved-host model or permission to persist arbitrary records.
+  before a model exists. Structural admission alone marks nonempty records as
+  unreviewed; the separate nordssh_data record schema must then validate them.
+  Scanner success alone is not permission to persist arbitrary records.
 - `nordssh_vault_crypto`: AES-256-GCM/Argon2id authenticated in-memory envelopes,
   cleansed move-only secrets, fresh-nonce saves and device-key opening. Optional
   `NORDSSH_BUILD_CRYPTO=ON` requires OpenSSL 3.5.9; Argon2 source is hash-pinned.
@@ -35,8 +50,8 @@ Current product modules:
 - `nordssh_ssh`: worker-only password/OpenSSH-key/PTY transport with explicit bound host-key
   approval, disabled automatic SSH config and bounded reads. Its optional
   `NORDSSH_BUILD_SSH=ON` fixture uses an ephemeral loopback AsyncSSH server, not a
-  production host or local system sshd. Async connection orchestration, saved
-  trust policy, keyboard-interactive/2FA, SFTP, jump hosts and forwarding are not implemented yet.
+  production host or the user's system sshd. Async orchestration, 2FA, saved data,
+  SFTP and jump/forwarding controllers live in the modules listed above.
   Private keys stay in memory: Ed25519, ECDSA P-256/384/521 and RSA-SHA2. Optional
   matching OpenSSH user certificates are supported by the transport; this is not
   a host-CA policy or a native authentication screen. The initial import scope is
@@ -50,8 +65,9 @@ Current product modules:
   HTML, URL launch or remote clipboard hooks. Its SSH test owns a real loopback
   connection in a test-only worker; it does not implement the product connection
   manager. Bounded mouse press/release/drag/hover/wheel encoding follows the
-  remote application's tracking protocol. Selection/search, preedit, fullscreen programs and
-  desktop clipboard/layout gates remain open.
+  remote application's tracking protocol. Selection/search/preedit and isolated
+  Linux TUI/input tests are described below; complete Windows/native desktop
+  acceptance is not inferred from component passes.
 
 Build the dependency-free core with CMake and a C++20 compiler:
 
@@ -120,8 +136,8 @@ motion deduplication, tracking modes, modifiers, bounded wheel batches and
 focus-loss releases. Right-click still pastes once by default; the widget's
 `setRightClickPaste(false)` lets a future native setting send it to a TUI instead.
 Shift gestures stay local even if Shift is released before the mouse button.
-Actual desktop pointer/DPI behavior, horizontal wheel and real vim/tmux acceptance
-remain pending.
+Complete native pointer/DPI and Windows desktop acceptance remain pending;
+isolated Linux real TUI and X11 input results are recorded in NATIVE_PROGRESS.
 
 `terminal_selection` checks engine-owned local drag selection, forward/reverse
 ranges, wide/combining Unicode, soft versus hard wraps, history, resize and screen
@@ -130,8 +146,8 @@ starts a local selection when a remote program owns the mouse. Copy has a 1 MiB
 UTF-8 limit and never truncates; an empty or oversized selection leaves the
 clipboard unchanged. Tests inject a clipboard sink, including a callback which
 closes its tab, and check shortcut-release suppression under Kitty mode. No
-real OS clipboard or actual EN/RU layout is changed. Word/line gestures,
-native desktop clipboard acceptance remains open. Double-click selects a word;
+real OS clipboard or actual EN/RU layout is changed by these component tests.
+The separate isolated X11 fixture exercises real clipboard/layout. Double-click selects a word;
 a nearby third click selects a line. Dragging outside the terminal scrolls one
 row per 50 ms tick, stopping on release, focus loss, hide or screen invalidation.
 
@@ -171,18 +187,19 @@ switching. This does not prove Windows native input or Wayland physical input.
 The SSH worker core now admits only a resolved numeric transport address while
 retaining the logical endpoint for host trust. Network operations accept a stop
 token/deadline and use nonblocking libssh with poll slices up to 25 ms. This is
-still a synchronous worker API, not a GUI connection manager. `ssh_cancellation`
+the synchronous transport API beneath the asynchronous manager. `ssh_cancellation`
 checks twelve isolated stall/cancel/deadline modes; `connection_attempt` checks
 request-bound one-shot host decisions, cached/changed keys, late messages and
 immutable close outcomes. See [ADR 0002](../docs/adr/0002-connection-control.md)
-for limits and the remaining async-controller work.
+for transport limits and ADR 0003 for the implemented asynchronous controller.
 
 `byte_queue`, `shell_pump` and `key_import_permit` check bounded cleansed byte
 mailboxes, cooperative bidirectional SSH transport, cancellation under output
 pressure and process-wide SSH key-import admission. The loopback pump fixture
 drains 3 MiB of stdout and 2 MiB of input with an independent stderr marker;
 the server initially refuses to read input until it has drained its output.
-These are worker-component checks, not a completed background connection flow.
+These are worker-component checks; connection_manager and connection_pane
+add actual asynchronous session/controller/UI coverage.
 
 `NORDSSH_BUILD_RESOLVER=ON` builds the separate Qt 6.12 Core/Network host resolver
 and `host_resolver` test. Deterministic fake DNS completions test stale tickets,

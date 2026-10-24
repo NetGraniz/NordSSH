@@ -6,6 +6,8 @@
 #include <QFile>
 #include <iostream>
 #include <future>
+#include <cstring>
+#include <algorithm>
 
 using namespace nordssh::vault;
 static void require(bool value) { if (!value) throw std::runtime_error("Vault persistence contract failed"); }
@@ -26,6 +28,13 @@ int main(int argc, char** argv) {
         (void)service.document();
         VaultDocument next; next.settings.theme = "light";
         next.groups.push_back({"10000000-0000-4000-8000-000000000001", "Synthetic", {}});
+        constexpr std::string_view dummyPassword = "synthetic-saved-secret";
+        CredentialRecord credential; credential.id="20000000-0000-4000-8000-000000000001";
+        credential.kind="password"; credential.host="localhost"; credential.user="fixture";
+        credential.secret=SecretBytes(dummyPassword.size());std::memcpy(credential.secret.bytes().data(),dummyPassword.data(),dummyPassword.size());
+        next.credentials.push_back(std::move(credential));
+        HostRecord host;host.id="30000000-0000-4000-8000-000000000001";host.name="Fixture";host.host="localhost";host.user="fixture";
+        host.group=next.groups[0].id;host.credential=next.credentials[0].id;next.hosts.push_back(std::move(host));
         service.save(next);
         require(service.document().groups.size() == 1);
         require(service.files().read(first + ".previous") == initial);
@@ -72,6 +81,8 @@ int main(int argc, char** argv) {
         require(service.document().groups.size() == 1);
         service.lock(); service.unlock(second, "second-pass");
         require(service.document().settings.theme == "light");
+        require(service.document().credentials.size()==1&&service.document().hosts.size()==1&&
+            std::ranges::equal(service.document().credentials[0].secret.bytes(),std::as_bytes(std::span(dummyPassword))));
         reject([&] { service.unlock(first, "wrong-pass"); });
         require(service.unlocked() && service.document().groups.size() == 1);
         reject([&] { service.unlock("missing.nordvault", "first-pass"); });
