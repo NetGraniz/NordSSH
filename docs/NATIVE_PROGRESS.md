@@ -630,3 +630,28 @@ a window. The fixture now supplies an explicit temporary tmux default shell/
 command with a unique new-window marker, rather than relying on inherited PS1.
 Timeouts include a bounded synthetic screen dump for diagnosis. These runs are
 still recorded as failed; the next attempt must verify the revised fixture.
+
+## Terminal integration evidence, 2026-10-24
+
+Run **40076016537** at **947e96f5699af200eec35723885a5116a8efa26e** is green.
+Ubuntu 24.04 x64, Qt 6.12.0, ReleaseSafe patched Ghostty at the pinned commit:
+
+- Combined Linux Qt/ABI/payload CTest: **12/12 in 2.84 s**, including real TUI
+  offscreen scenarios. Local Windows combined crypto/SSH/Qt tests: **15/15 in
+  30.27 s** at the same product-code baseline, before fixture-only additions.
+- Real vim/nano/less/top/tmux: **5/5 with xcb/Xvfb**, and **5/5 with Wayland/
+  headless Weston**, with asserted editor saves, navigation and resize.
+- X11 native XTest US/Russian groups and cross-process clipboard ownership:
+  printable input, Ctrl+V, Ctrl+Shift+V, Shift+Insert, Ctrl+C and Ctrl+Shift+C
+  all passed. No user's desktop, layout or clipboard was used.
+- The standard native core/crypto/SSH workflow **40076015438** also passed.
+
+The Qt Linux acquisition lock hash is
+`477971db7b9641638ed4a98e9c8f8df5aa726f239451f4e69659bef562826220`.
+CI logs are retained on the linked GitHub run; previous failed runs stay failed.
+This establishes the terminal's implemented engineering slice on both OSes and
+real Linux programs. It does NOT close physical Windows/Wayland keyboard/IME/
+clipboard, Windows-to-Linux real-TUI SSH acceptance, clean-machine packaging,
+or the full original release matrix. Those remain explicit acceptance work.
+No native installer or user release is published. Connection/data engineering
+can continue without representing the current library/tests as an application.

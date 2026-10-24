@@ -53,6 +53,14 @@ must rerun the relevant matrix with its own pinned source and native build.
 
 ## Platforms and layers
 
+Current pinned-Ghostty execution evidence (not a replacement for the full cases
+below) is in NATIVE_PROGRESS.md. At 947e96f, Linux run 40076016537 passed 12 CTests,
+all five actual vim/nano/less/top/tmux scenarios through both xcb and Wayland,
+and native X11 EN/RU keyboard/cross-process clipboard tests. Windows local
+combined Qt/SSH/crypto checks passed 15 CTests. Physical Windows/Wayland input,
+full OS IME, clean-package execution and the rest of the release matrix are not
+closed by those results. The historical libvterm no-go above remains unchanged.
+
 | Layer | Required environment | What it proves |
 | --- | --- | --- |
 | Core/model | Windows x64 and Linux x64 | Parser, terminal state, crypto and trust-state assertions without GUI/network |
