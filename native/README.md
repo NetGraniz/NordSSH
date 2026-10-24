@@ -109,5 +109,15 @@ motion deduplication, tracking modes, modifiers, bounded wheel batches and
 focus-loss releases. Right-click still pastes once by default; the widget's
 `setRightClickPaste(false)` lets a future native setting send it to a TUI instead.
 Shift gestures stay local even if Shift is released before the mouse button.
-Actual desktop pointer/DPI behavior, horizontal wheel, selection and real
-vim/tmux acceptance remain pending.
+Actual desktop pointer/DPI behavior, horizontal wheel and real vim/tmux acceptance
+remain pending.
+
+`terminal_selection` checks engine-owned local drag selection, forward/reverse
+ranges, wide/combining Unicode, soft versus hard wraps, history, resize and screen
+switches. Ctrl+Shift+C copies plain selected text; Ctrl+C still interrupts. Shift
+starts a local selection when a remote program owns the mouse. Copy has a 1 MiB
+UTF-8 limit and never truncates; an empty or oversized selection leaves the
+clipboard unchanged. Tests inject a clipboard sink, including a callback which
+closes its tab, and check shortcut-release suppression under Kitty mode. No
+real OS clipboard or actual EN/RU layout is changed. Word/line gestures,
+drag-autoscroll, search and native desktop clipboard acceptance remain open.

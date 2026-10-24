@@ -27,6 +27,15 @@ unsigned historyKey(int key) {
     default: return 0;
     }
 }
+bool copyKey(const QKeyEvent& event) {
+#ifdef Q_OS_WIN
+    if (event.nativeVirtualKey() == 0x43) return true;
+#endif
+    return event.key() == Qt::Key_C;
+}
+bool copyModifiers(const QKeyEvent& event) {
+    return event.modifiers() == (Qt::ControlModifier | Qt::ShiftModifier);
+}
 }
 TerminalWidget::TerminalWidget(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_OpaquePaintEvent);
@@ -37,6 +46,7 @@ TerminalWidget::TerminalWidget(QWidget* parent) : QWidget(parent) {
     setAccessibleName(tr("SSH terminal"));
     updateMetrics();
     readPaste_ = [] { return QApplication::clipboard()->text(); };
+    writeCopy_ = [](const QString& text) { QApplication::clipboard()->setText(text, QClipboard::Clipboard); };
     confirmPaste_ = [this] {
         auto* dialog = new QMessageBox(QMessageBox::Warning, tr("Paste commands"),
             tr("This text contains line breaks or terminal controls. Paste it?"),
@@ -56,6 +66,7 @@ void TerminalWidget::setSend(std::function<void(const QByteArray&)> send) { send
 void TerminalWidget::setResize(std::function<void(int, int)> resize) { resize_ = std::move(resize); }
 void TerminalWidget::setFailure(std::function<void()> failure) { failure_ = std::move(failure); }
 void TerminalWidget::setRightClickPaste(bool enabled) { pasteRouter_->setRightClickPaste(enabled); }
+void TerminalWidget::setCopySink(std::function<void(const QString&)> write) { writeCopy_ = std::move(write); }
 void TerminalWidget::setPasteSource(std::function<QString()> read, std::function<bool()> confirm) {
     readPaste_ = std::move(read); confirmPaste_ = std::move(confirm);
 }
@@ -88,7 +99,8 @@ TerminalFrame TerminalWidget::snapshot() { return frame_; }
 bool TerminalWidget::event(QEvent* event) {
     if (event->type() == QEvent::ShortcutOverride) {
         auto* key = static_cast<QKeyEvent*>(event);
-        if (key->modifiers() == Qt::ShiftModifier && historyKey(key->key())) {
+        if ((key->modifiers() == Qt::ShiftModifier && historyKey(key->key())) ||
+            (copyKey(*key) && copyModifiers(*key))) {
             event->accept(); return true;
         }
     }
@@ -109,7 +121,8 @@ void TerminalWidget::paintEvent(QPaintEvent*) {
     for (int y = 0; y < frame_.rows; ++y) {
         for (int x = 0; x < frame_.columns; ++x) {
             const auto& cell = frame_.cells[y * frame_.columns + x];
-            painter.fillRect(x * cellWidth_, y * cellHeight_, cellWidth_, cellHeight_, cell.background);
+            painter.fillRect(x * cellWidth_, y * cellHeight_, cellWidth_, cellHeight_,
+                cell.selected ? palette().color(QPalette::Highlight) : cell.background);
         }
     }
     for (int y = 0; y < frame_.rows; ++y) {
@@ -119,7 +132,8 @@ void TerminalWidget::paintEvent(QPaintEvent*) {
             auto glyphFont = font();
             glyphFont.setBold(cell.bold); glyphFont.setItalic(cell.italic);
             glyphFont.setUnderline(cell.underline); glyphFont.setStrikeOut(cell.strike);
-            painter.setFont(glyphFont); painter.setPen(cell.foreground);
+            painter.setFont(glyphFont);
+            painter.setPen(cell.selected ? palette().color(QPalette::HighlightedText) : cell.foreground);
             painter.save();
             const QRect area(x * cellWidth_, y * cellHeight_, cell.width * cellWidth_, cellHeight_);
             painter.setClipRect(area);
@@ -150,6 +164,7 @@ void TerminalWidget::refreshGeometry() {
         const int columns = std::clamp(width() / cellWidth_, 1, 512);
         const int rows = std::clamp(height() / cellHeight_, 1, 256);
         model_.resize(columns, rows, cellWidth_, cellHeight_);
+        localSelection_ = false;
         frame_ = model_.frame(); update();
         const auto callback = resize_;
         if (callback) callback(columns, rows);
@@ -160,6 +175,7 @@ void TerminalWidget::keyPressEvent(QKeyEvent* event) {
     if (failed_) return;
     QPointer<TerminalWidget> self(this);
     try {
+        if (copyShortcut(event)) return;
         if (historyNavigation(event)) return;
         const auto bytes = model_.key(*event);
         const auto send = send_;
@@ -167,6 +183,24 @@ void TerminalWidget::keyPressEvent(QKeyEvent* event) {
     } catch (...) { if (self) self->fail(); }
 }
 void TerminalWidget::keyReleaseEvent(QKeyEvent* event) { keyPressEvent(event); }
+bool TerminalWidget::copyShortcut(QKeyEvent* event) {
+    if (!copyKey(*event)) return false;
+    if (event->type() == QEvent::KeyRelease) {
+        if (!copyKeyHeld_) return false;
+        if (!event->isAutoRepeat()) copyKeyHeld_ = false;
+        return true;
+    }
+    // Once claimed, repeats and the eventual release stay local even if the
+    // user releases Shift first. Ctrl+C on a new gesture remains an interrupt.
+    if (event->isAutoRepeat() && copyKeyHeld_) return true;
+    copyKeyHeld_ = false;
+    if (!copyModifiers(*event)) return false;
+    copyKeyHeld_ = true;
+    const auto text = model_.selectionText();
+    const auto write = writeCopy_;
+    if (text && write && !event->isAutoRepeat()) write(*text); // May close this tab.
+    return true;
+}
 bool TerminalWidget::historyNavigation(QKeyEvent* event) {
     const auto bit = historyKey(event->key());
     if (!bit) return false;
@@ -232,6 +266,22 @@ void TerminalWidget::mouseInput(QMouseEvent* event) {
         const bool release = event->type() == QEvent::MouseButtonRelease;
         const bool motion = event->type() == QEvent::MouseMove;
         if (!motion && event->button() != Qt::LeftButton && event->button() != Qt::MiddleButton && event->button() != Qt::RightButton) return;
+        if (localSelection_ && (motion || (release && event->button() == Qt::LeftButton))) {
+            if (motion && !event->buttons().testFlag(Qt::LeftButton)) {
+                model_.endSelection(); localSelection_ = false; return;
+            }
+            model_.extendSelection(event->position());
+            if (release) { model_.endSelection(); localSelection_ = false; }
+            frame_ = model_.frame(); update(); return;
+        }
+        if (!motion && !release && event->button() == Qt::LeftButton &&
+            (!frame_.mouseTracking || event->modifiers().testFlag(Qt::ShiftModifier))) {
+            if (event->position().x() < 0 || event->position().y() < 0 ||
+                event->position().x() >= frame_.columns * cellWidth_ ||
+                event->position().y() >= frame_.rows * cellHeight_) return;
+            model_.beginSelection(event->position()); localSelection_ = true;
+            frame_ = model_.frame(); update(); return;
+        }
         if (release) {
             if (!remoteButtons_.testFlag(event->button())) return;
             remoteButtons_ &= ~event->button();
@@ -256,6 +306,7 @@ void TerminalWidget::mouseDoubleClickEvent(QMouseEvent* event) { mouseInput(even
 void TerminalWidget::mouseReleaseEvent(QMouseEvent* event) { mouseInput(event); }
 void TerminalWidget::mouseMoveEvent(QMouseEvent* event) { mouseInput(event); }
 void TerminalWidget::focusOutEvent(QFocusEvent* event) {
+    model_.endSelection(); localSelection_ = false;
     // Keep local-release suppression if focus changes while a navigation key
     // is held. A subsequent nonlocal press explicitly replaces that state.
     wheelAngle_ = wheelPixels_ = remoteWheel_ = 0;

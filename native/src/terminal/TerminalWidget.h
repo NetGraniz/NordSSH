@@ -16,6 +16,7 @@ public:
     void setFailure(std::function<void()> failure);
     void setPasteSource(std::function<QString()> read, std::function<bool()> confirm);
     void setRightClickPaste(bool enabled);
+    void setCopySink(std::function<void(const QString&)> write);
     [[nodiscard]] TerminalFrame snapshot();
     QSize sizeHint() const override;
 protected:
@@ -40,12 +41,14 @@ private:
     void updateMetrics();
     void refreshGeometry();
     bool historyNavigation(QKeyEvent*);
+    bool copyShortcut(QKeyEvent*);
     void followOutput();
     void mouseInput(QMouseEvent*);
     TerminalModel model_;
     TerminalFrame frame_;
     int cellWidth_ = 9, cellHeight_ = 18, baseline_ = 14;
     bool failed_ = false;
+    bool localSelection_ = false, copyKeyHeld_ = false;
     unsigned historyKeys_ = 0;
     PasteRouter* pasteRouter_ = nullptr;
     Qt::MouseButtons remoteButtons_;
@@ -58,5 +61,6 @@ private:
     std::function<void()> failure_;
     std::function<QString()> readPaste_;
     std::function<bool()> confirmPaste_;
+    std::function<void(const QString&)> writeCopy_;
 };
 } // namespace nordssh

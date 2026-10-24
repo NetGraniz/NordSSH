@@ -485,3 +485,31 @@ Next engineering work:
   UI and keyboard-interactive/2FA; add process-wide key-import scheduling.
 - Implement SFTP/forwarding, complete native UI, installers and signed full-bundle
   updates/rollback, with separate acceptance evidence before inviting the user.
+
+## Local selection and explicit copy, 2026-10-24
+
+Added raster-cell highlighting and engine-owned tracked drag selection. No second
+text buffer or parser is introduced. The adapter resolves viewport points into
+short-lived refs and installs returned selection snapshots immediately; only the
+engine retains selection/anchor state. Ordinary output can move tracked history;
+resize and focus loss end a gesture. Engine generation checks protect an anchor
+if output switches/recycles a screen within one feed. Changing active screens
+clears the target selection rather than implicitly copying a prior screen.
+
+Ctrl+Shift+C copies plain engine-formatted text, unwrapping soft wraps and trimming
+line-end spaces. Ctrl+C still sends interrupt. Only an explicit copy writes the
+system clipboard; selecting text never writes X11 primary or Clipboard. Tests
+replace the clipboard sink, so the user's clipboard remains untouched. Refused
+empty/over-1-MiB UTF-8 copies leave existing clipboard contents alone. A local
+Shift+left gesture stays local even if Shift is released first while remote mouse
+reporting is enabled. Copy key repeats/releases cannot leak into Kitty input.
+
+The new synthetic offscreen test covers forward/reverse ranges, Unicode clusters,
+wide cells, hard/soft wraps, history with ongoing output, resize, alternate screen,
+nonfinite coordinates, oversize copy refusal/recovery, focus cancellation,
+Ctrl+C versus copy, Windows physical-C mapping and destruction from a copy
+callback. Final combined Windows Debug CTest passed **13/13 in 29.55 s**, including
+wide-cell highlighting and lost-button cancellation. Linux Qt desktop,
+real OS clipboard/layout, drag-autoscroll, word/line selection, search and real
+fullscreen applications remain open. This is an engineering increment, not a
+native application release or a request for user testing.

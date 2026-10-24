@@ -11,6 +11,9 @@
 #include <stdexcept>
 #include <utility>
 
+// Ghostty's C formatter field is named emit; this TU has no Qt signal syntax.
+#undef emit
+
 namespace nordssh {
 namespace {
 void checked(GhosttyResult result) {
@@ -92,12 +95,26 @@ struct TerminalModel::Impl {
     GhosttyKeyEvent event{};
     GhosttyMouseEncoder mouseEncoder{};
     GhosttyMouseEvent mouseEvent{};
+    GhosttySelectionGesture gesture{};
+    GhosttySelectionGestureEvent selectionPress{}, selectionDrag{};
+    bool selecting = false;
     int columns = 80, rowCount = 24, cellWidth = 8, cellHeight = 16;
     QThread* owner = QThread::currentThread();
     QByteArray replies;
     bool overflow = false;
     void checkOwner() const {
         if (owner != QThread::currentThread()) throw std::logic_error("Terminal thread ownership violation");
+    }
+    GhosttyGridRef selectionRef(QPointF position) {
+        if (!std::isfinite(position.x()) || !std::isfinite(position.y()))
+            throw std::invalid_argument("Nonfinite selection position");
+        GhosttyPoint point{};
+        point.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+        point.value.coordinate.x = static_cast<std::uint16_t>(std::clamp(position.x() / cellWidth, 0.0, double(columns - 1)));
+        point.value.coordinate.y = static_cast<std::uint32_t>(std::clamp(position.y() / cellHeight, 0.0, double(rowCount - 1)));
+        auto ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+        checked(ghostty_terminal_grid_ref(terminal, point, &ref));
+        return ref;
     }
     QByteArray encodeMouse(GhosttyMouseAction action, GhosttyMouseButton button,
                            QPointF position, Qt::KeyboardModifiers mods, bool pressed) {
@@ -136,6 +153,9 @@ struct TerminalModel::Impl {
         catch (...) { self.overflow = true; }
     }
     ~Impl() {
+        ghostty_selection_gesture_event_free(selectionDrag);
+        ghostty_selection_gesture_event_free(selectionPress);
+        ghostty_selection_gesture_free(gesture, terminal);
         ghostty_mouse_event_free(mouseEvent);
         ghostty_mouse_encoder_free(mouseEncoder);
         ghostty_key_event_free(event);
@@ -177,6 +197,9 @@ TerminalModel::TerminalModel(int columns, int rows) : impl_(std::make_unique<Imp
     checked(ghostty_key_event_new(nullptr, &state.event));
     checked(ghostty_mouse_encoder_new(nullptr, &state.mouseEncoder));
     checked(ghostty_mouse_event_new(nullptr, &state.mouseEvent));
+    checked(ghostty_selection_gesture_new(nullptr, &state.gesture));
+    checked(ghostty_selection_gesture_event_new(nullptr, &state.selectionPress, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_PRESS));
+    checked(ghostty_selection_gesture_event_new(nullptr, &state.selectionDrag, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DRAG));
     const bool trackCell = true;
     ghostty_mouse_encoder_setopt(state.mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL, &trackCell);
     state.columns = columns; state.rowCount = rows; state.mouseGeometry();
@@ -186,8 +209,14 @@ TerminalModel::~TerminalModel() = default;
 void TerminalModel::feed(const QByteArray& bytes) {
     auto& state = *impl_; state.checkOwner();
     if (bytes.size() > MaximumBatch) throw std::invalid_argument("Terminal batch exceeds limit");
+    GhosttyTerminalScreen before{}, after{};
+    checked(ghostty_terminal_get(state.terminal, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &before));
+    // Gesture anchors track ordinary output. The engine validates their screen
+    // generation before use, including a switch and return within one batch.
     ghostty_terminal_vt_write(state.terminal, reinterpret_cast<const std::uint8_t*>(bytes.constData()),
         static_cast<std::size_t>(bytes.size()));
+    checked(ghostty_terminal_get(state.terminal, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &after));
+    if (before != after) checked(ghostty_terminal_set(state.terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr));
     // This upstream helper resets motion deduplication. Sync on output/mode
     // changes, not on every pointer event in an otherwise unchanged terminal.
     ghostty_mouse_encoder_setopt_from_terminal(state.mouseEncoder, state.terminal);
@@ -199,6 +228,7 @@ void TerminalModel::resize(int columns, int rows, int cellWidth, int cellHeight)
     impl_->checkOwner(); dimensions(columns, rows);
     if (cellWidth < 1 || cellWidth > 1024 || cellHeight < 1 || cellHeight > 1024)
         throw std::invalid_argument("Terminal cell size outside limits");
+    endSelection();
     checked(ghostty_terminal_resize(impl_->terminal, static_cast<std::uint16_t>(columns),
         static_cast<std::uint16_t>(rows), static_cast<std::uint32_t>(cellWidth), static_cast<std::uint32_t>(cellHeight)));
     impl_->columns = columns; impl_->rowCount = rows;
@@ -221,6 +251,58 @@ void TerminalModel::scrollToBottom() {
     impl_->checkOwner();
     GhosttyTerminalScrollViewport request{}; request.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
     ghostty_terminal_scroll_viewport(impl_->terminal, request);
+}
+void TerminalModel::beginSelection(QPointF position) {
+    auto& state = *impl_; state.checkOwner(); endSelection();
+    checked(ghostty_terminal_set(state.terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr));
+    auto ref = state.selectionRef(position);
+    checked(ghostty_selection_gesture_event_set(state.selectionPress, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF, &ref));
+    const GhosttySurfacePosition pointer{
+        std::clamp(position.x(), 0.0, double(state.columns * state.cellWidth)),
+        std::clamp(position.y(), 0.0, double(state.rowCount * state.cellHeight))};
+    checked(ghostty_selection_gesture_event_set(state.selectionPress, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_POSITION, &pointer));
+    const auto result = ghostty_selection_gesture_event(state.gesture, state.terminal, state.selectionPress, nullptr);
+    if (result != GHOSTTY_NO_VALUE) checked(result);
+    state.selecting = true;
+}
+void TerminalModel::extendSelection(QPointF position) {
+    auto& state = *impl_; state.checkOwner();
+    if (!state.selecting) return;
+    auto ref = state.selectionRef(position);
+    checked(ghostty_selection_gesture_event_set(state.selectionDrag, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF, &ref));
+    const GhosttySurfacePosition pointer{
+        std::clamp(position.x(), 0.0, double(state.columns * state.cellWidth)),
+        std::clamp(position.y(), 0.0, double(state.rowCount * state.cellHeight))};
+    checked(ghostty_selection_gesture_event_set(state.selectionDrag, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_POSITION, &pointer));
+    const GhosttySelectionGestureGeometry geometry{
+        static_cast<std::uint32_t>(state.columns), static_cast<std::uint32_t>(state.cellWidth),
+        0, static_cast<std::uint32_t>(state.rowCount * state.cellHeight)};
+    checked(ghostty_selection_gesture_event_set(state.selectionDrag, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY, &geometry));
+    auto selection = GHOSTTY_INIT_SIZED(GhosttySelection);
+    const auto result = ghostty_selection_gesture_event(state.gesture, state.terminal, state.selectionDrag, &selection);
+    if (result == GHOSTTY_NO_VALUE) return;
+    checked(result);
+    // Snapshot refs expire at the next mutation: install immediately, never cache.
+    checked(ghostty_terminal_set(state.terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &selection));
+}
+void TerminalModel::endSelection() {
+    auto& state = *impl_; state.checkOwner();
+    if (state.gesture) ghostty_selection_gesture_reset(state.gesture, state.terminal);
+    state.selecting = false;
+}
+std::optional<QString> TerminalModel::selectionText() {
+    auto& state = *impl_; state.checkOwner();
+    auto options = GHOSTTY_INIT_SIZED(GhosttyTerminalSelectionFormatOptions);
+    options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN; options.unwrap = true; options.trim = true;
+    std::size_t size = 0;
+    const auto result = ghostty_terminal_selection_format_buf(state.terminal, options, nullptr, 0, &size);
+    if (result == GHOSTTY_NO_VALUE) return std::nullopt;
+    if (result != GHOSTTY_OUT_OF_SPACE) checked(result);
+    if (!size || size > MaximumCopy) return std::nullopt;
+    QByteArray bytes(static_cast<qsizetype>(size), Qt::Uninitialized);
+    checked(ghostty_terminal_selection_format_buf(state.terminal, options,
+        reinterpret_cast<std::uint8_t*>(bytes.data()), size, &size));
+    return QString::fromUtf8(bytes.constData(), static_cast<qsizetype>(size));
 }
 TerminalFrame TerminalModel::frame() {
     auto& state = *impl_; state.checkOwner();
@@ -249,10 +331,15 @@ TerminalFrame TerminalModel::frame() {
     while (ghostty_render_state_row_iterator_next(state.rows)) {
         if (y >= rows) throw std::runtime_error("Terminal row overflow");
         checked(ghostty_render_state_row_get(state.rows, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &state.cells));
+        auto selection = GHOSTTY_INIT_SIZED(GhosttyRenderStateRowSelection);
+        const auto selected = ghostty_render_state_row_get(state.rows, GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION, &selection);
+        if (selected != GHOSTTY_NO_VALUE) checked(selected);
         int x = 0;
         while (ghostty_render_state_row_cells_next(state.cells)) {
             if (x >= columns) throw std::runtime_error("Terminal column overflow");
-            auto& cell = frame.cells[y * columns + x++];
+            auto& cell = frame.cells[y * columns + x];
+            cell.selected = selected == GHOSTTY_SUCCESS && x >= selection.start_x && x <= selection.end_x;
+            ++x;
             GhosttyCell raw{};
             GhosttyCellWide wide{};
             checked(ghostty_render_state_row_cells_get(state.cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW, &raw));

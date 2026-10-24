@@ -4,6 +4,8 @@
 #include <QString>
 #include <QVector>
 #include <memory>
+#include <optional>
+#include <QPointF>
 #include <cstddef>
 
 class QKeyEvent;
@@ -16,7 +18,7 @@ struct TerminalCell {
     QColor foreground, background;
     int width = 1; // Zero for a wide character's continuation cell.
     bool bold = false, italic = false, underline = false;
-    bool strike = false, invisible = false;
+    bool strike = false, invisible = false, selected = false;
 };
 struct TerminalFrame {
     int columns = 0, rows = 0;
@@ -33,6 +35,7 @@ class TerminalModel final {
 public:
     static constexpr int MaximumBatch = 65536;
     static constexpr int MaximumPaste = 65536;
+    static constexpr int MaximumCopy = 1024 * 1024;
     TerminalModel(int columns = 80, int rows = 24);
     ~TerminalModel();
     TerminalModel(const TerminalModel&) = delete;
@@ -42,6 +45,12 @@ public:
     void scroll(int lines); // Negative is up; one operation is capped at 10,000 lines.
     void scrollToTop();
     void scrollToBottom();
+    // Engine-owned tracked anchors; no borrowed grid refs escape the adapter.
+    void beginSelection(QPointF position);
+    void extendSelection(QPointF position);
+    void endSelection();
+    // No selection, empty text or an oversized copy leaves the clipboard alone.
+    [[nodiscard]] std::optional<QString> selectionText();
     [[nodiscard]] TerminalFrame frame();
     [[nodiscard]] QByteArray key(const QKeyEvent& event);
     [[nodiscard]] QByteArray mouse(const QMouseEvent& event);
