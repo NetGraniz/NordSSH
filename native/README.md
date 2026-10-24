@@ -150,3 +150,9 @@ and resize. It uses temporary HOME/config/file state, never production SSH or
 user profiles. The manual Native Linux terminal engineering workflow repeats
 the scenarios with offscreen, xcb/Xvfb and Wayland/headless Weston. This driver
 is not a product subprocess backend or a physical keyboard/clipboard test.
+
+The separate `x11_input_fixture.py` checks actual X11/XTest key events and
+cross-process QClipboard transfer on an explicitly isolated Xvfb display. It
+refuses to run without `NORDSSH_ISOLATED_DESKTOP=1`; never point this fixture at
+a user's desktop. Both US and Russian layouts stay configured during group
+switching. This does not prove Windows native input or Wayland physical input.

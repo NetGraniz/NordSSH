@@ -1,8 +1,10 @@
 // Test-only framed stdin driver. Never part of the application runtime.
 #include "terminal/TerminalWidget.h"
 #include <QApplication>
+#include <QClipboard>
 #include <QImage>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <array>
 #include <cstdint>
 #include <iostream>
@@ -21,7 +23,8 @@ static void reply(char kind, const QByteArray& bytes) {
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     try {
-        TerminalWidget widget; widget.resize(widget.sizeHint()); widget.show(); app.processEvents();
+        TerminalWidget widget; widget.setWindowTitle("NordSSH isolated input fixture");
+        widget.resize(widget.sizeHint()); widget.show(); app.processEvents();
         QByteArray sent; bool failed = false;
         widget.setSend([&](const QByteArray& bytes) { sent += bytes; });
         widget.setFailure([&] { failed = true; });
@@ -34,6 +37,27 @@ int main(int argc, char** argv) {
             if (!std::cin.read(body.data(), size)) throw std::runtime_error("Truncated TUI driver request");
             sent.clear();
             switch (header[0]) {
+            case 'E': app.processEvents(); break;
+            case 'B': {
+                if (qEnvironmentVariable("NORDSSH_ISOLATED_DESKTOP") != "1")
+                    throw std::runtime_error("Real clipboard fixture requires explicit isolated-desktop flag");
+                QApplication::clipboard()->setText(QString::fromUtf8(body));
+                widget.setPasteSource([] { return QApplication::clipboard()->text(); }, [] { return false; });
+                break;
+            }
+            case 'S': {
+                if (size != 4) throw std::runtime_error("Bad fixture selection range");
+                const auto columns = number(body.constData());
+                if (!columns || columns > 80) throw std::runtime_error("Fixture selection range exceeds cap");
+                const double cell = widget.sizeHint().width() / 80.0;
+                const QPointF from(cell * 0.2, 5), to((columns - 1 + 0.8) * cell, 5);
+                QMouseEvent press(QEvent::MouseButtonPress, from, from, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(&widget, &press);
+                QMouseEvent move(QEvent::MouseMove, to, to, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(&widget, &move);
+                QMouseEvent release(QEvent::MouseButtonRelease, to, to, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(&widget, &release); break;
+            }
             case 'F': widget.feed(body); break;
             case 'T': {
                 const auto text = QString::fromUtf8(body);

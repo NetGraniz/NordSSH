@@ -610,3 +610,15 @@ Added bounded connection/retry time and an Alpine distfiles fallback only for
 network failure. Downloaded that tarball independently: SHA256 exactly matches
 the existing 49560f...1c1e9f pin. The hash check remains mandatory before extract;
 no new library version, weaker hash or automatic pin update was introduced.
+
+The standard core workflow 40075412359 at e09986d is now green: Windows/Linux
+core, Linux sanitizers and the isolated crypto/SSH job all passed. This confirms
+the bounded libssh download fallback removed the observed CI acquisition blocker.
+
+Added a separate X11 physical-input fixture for a fresh disposable Xvfb display.
+It injects XTest keycodes while switching between configured US/Russian groups,
+and uses a different process as clipboard owner/reader. It checks literal input,
+Ctrl+V, Ctrl+Shift+V, Shift+Insert, Ctrl+C and Ctrl+Shift+C copy. Real clipboard
+access in the test driver requires an explicit isolated-desktop environment flag;
+the fixture is not run against the user's display or clipboard. These tests are
+new and must run before any claim of successful native EN/RU input acceptance.
