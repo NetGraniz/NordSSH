@@ -887,3 +887,17 @@ binary streams, half-close, a destination DNS name not resolved locally, indepen
 keys, rejected jump trust and changed destination trust before credentials.
 See ADR 0005 for bounds, remote commit uncertainty and transport discard policy.
 The final whole-stack regression and real OpenSSH gate are still pending.
+
+Windows complete Release regression with forwarding/transfers passed **28/28
+in 158.54 s** after fixing the explicit QString normalization-form argument.
+Linux 40105351137 failed at the new test's aggregate credential initializer
+under GCC -Werror; explicit empty certificate/passphrase initializers fix the
+test without relaxing warnings. That failed run is not accepted evidence.
+
+Additional review tightened new local downloads: Qt 6.12 QTemporaryFile's
+atomic no-replace rename closes the unconfirmed-overwrite race. Owner-only
+staging is explicitly flushed before rename; the six SFTP modes passed again
+in 15.68 s. Added a real OpenSSH gate, restricted to disposable GitHub runners:
+private loopback sshd config/keys, one unique temporary account, stdin-only
+synthetic client key, negative auth/trust, SFTP integrity/CRUD/symlink refusal,
+and actual OpenSSH direct forwarding with half-close. Execution remains pending.

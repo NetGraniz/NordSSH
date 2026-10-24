@@ -5,6 +5,7 @@
 #include <QSaveFile>
 #include <QRegularExpression>
 #include <source_location>
+#include <cerrno>
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -104,6 +105,16 @@ void protectLocalHandle(qintptr descriptorFd) {
     Security().protect(descriptorFd);
 #else
     if (fchmod(static_cast<int>(descriptorFd), 0600)) fail();
+#endif
+}
+void syncLocalHandle(qintptr descriptorFd) {
+#ifdef _WIN32
+    const auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(static_cast<int>(descriptorFd)));
+    if (handle == INVALID_HANDLE_VALUE || !FlushFileBuffers(handle)) fail();
+#else
+    int result;
+    do { result = fsync(static_cast<int>(descriptorFd)); } while (result < 0 && errno == EINTR);
+    if (result) fail();
 #endif
 }
 PrivateFiles::PrivateFiles(QString directory) : directory_(QFileInfo(directory).absoluteFilePath()) {

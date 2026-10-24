@@ -43,7 +43,7 @@ void tree(SftpClient& client, const TransferRequest& request, bool upload,
         std::set<QString> foldedNames;
         for (const auto& child : listing) {
             // Do not collapse remote aliases into one Windows destination.
-            if (!foldedNames.insert(QString::fromUtf8(child.name).normalized().toCaseFolded()).second) throw TransferError();
+            if (!foldedNames.insert(QString::fromUtf8(child.name).normalized(QString::NormalizationForm_C).toCaseFolded()).second) throw TransferError();
             const auto childLocal = relative + '/' + QString::fromUtf8(child.name);
             const auto childRemote = remote + '/' + child.name;
             if (child.kind == RemoteEntry::Kind::Directory) tree(client, request, false, childRemote, childLocal, depth+1, entries, progress, control);

@@ -23,7 +23,7 @@ jobs:
       - name: Isolated runner dependencies and real TUI programs
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libsecret-1-dev gnome-keyring dbus-x11
+          sudo apt-get install -y libsecret-1-dev gnome-keyring dbus-x11 openssh-server
           sudo apt-get install -y p7zip-full libgl1-mesa-dev libegl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0 libb2-1 libdouble-conversion3 fonts-dejavu-core fonts-noto-cjk xvfb xauth xdotool xclip x11-xkb-utils libxtst6 weston vim nano less procps tmux
       - name: Acquire hash-verified Qt 6.12.0 engineering SDK
         run: python3 native/scripts/acquire-qt-linux.py "$GITHUB_WORKSPACE/qt-sdk"
@@ -84,4 +84,5 @@ jobs:
         env:
           NORDSSH_QT_PREFIX: ${{ github.workspace }}/qt-sdk
           NORDSSH_VT_PREFIX: ${{ github.workspace }}/vt-source/zig-out
+          NORDSSH_ISOLATED_OPENSSH: '1'
         run: bash native/scripts/check-crypto-linux.sh

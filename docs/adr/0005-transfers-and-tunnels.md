@@ -23,7 +23,8 @@ close the descriptor. Callback registration ends before Session destruction.
 After cancellation/timeout the service transport is discarded; pending jobs are
 cancelled, and a new authenticated connection is needed. No QThread termination.
 
-Downloads use private QSaveFile staging without direct-write fallback. Uploads
+Downloads use private QTemporaryFile staging, native file flush and atomic
+rename without copy/delete fallback. New targets use no-replace rename. Uploads
 use exclusive random 0600 sibling staging. Confirmed replacement requires POSIX
 rename support. libssh 0.12.2 automatically chooses its overwrite extension even
 for a new target, so new-file upload instead requires OpenSSH hardlink support:

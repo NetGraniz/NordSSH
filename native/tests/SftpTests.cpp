@@ -44,7 +44,7 @@ static void queue(unsigned port, const std::string& hash, const QString& root) {
         if (status.phase == AttemptPhase::Authentication && !authenticated) {
             constexpr std::string_view password = "synthetic-ssh-password";
             nordssh::vault::SecretBytes bytes(password.size()); std::memcpy(bytes.bytes().data(), password.data(), password.size());
-            require(manager.authenticate(*status.request, {Credentials::Kind::Password, std::move(bytes)})); authenticated = true;
+            require(manager.authenticate(*status.request, {Credentials::Kind::Password, std::move(bytes),nordssh::vault::SecretBytes(0),{}})); authenticated = true;
         }
         if (status.settled) { require(status.phase == AttemptPhase::Closed); break; }
         QThread::msleep(2);

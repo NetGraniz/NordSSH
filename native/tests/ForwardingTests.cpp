@@ -26,7 +26,7 @@ static void advance(ConnectionManager& manager, const std::string& hash, const c
     const auto status = manager.status();
     if (status.phase == AttemptPhase::Authentication && !authenticated) {
         const auto size = std::strlen(password); nordssh::vault::SecretBytes secret(size); std::memcpy(secret.bytes().data(),password,size);
-        require(manager.authenticate(*status.request,{Credentials::Kind::Password,std::move(secret)})); authenticated = true;
+        require(manager.authenticate(*status.request,{Credentials::Kind::Password,std::move(secret),nordssh::vault::SecretBytes(0),{}})); authenticated = true;
     }
 }
 static void echo(std::uint16_t port) {

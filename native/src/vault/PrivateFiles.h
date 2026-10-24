@@ -10,6 +10,7 @@ namespace nordssh::vault {
 // protected before any secret/file content is written to a temporary file.
 void rejectLocalLinks(const QString& path);
 void protectLocalHandle(qintptr descriptorFd);
+void syncLocalHandle(qintptr descriptorFd);
 class FileError final : public std::runtime_error {
 public: explicit FileError(unsigned check = 0) : std::runtime_error("Private vault file operation failed (check " + std::to_string(check) + ")") {}
 };

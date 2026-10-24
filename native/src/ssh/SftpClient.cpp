@@ -4,7 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QSaveFile>
+#include <QTemporaryFile>
 #include <QDateTime>
 #include <algorithm>
 #include <set>
@@ -156,8 +156,8 @@ void SftpClient::download(const std::string& remote, const QString& root, const 
     const QFileInfo initial(target);
     if (initial.exists() && (!confirmed || !initial.isFile())) bad();
     File input(sftp_open(sftp_, remote.c_str(), O_RDONLY, 0), &sftp_close); if (!input) bad();
-    QSaveFile output(target); output.setDirectWriteFallback(false);
-    if (!output.open(QIODevice::WriteOnly)) bad();
+    QTemporaryFile output(QDir(QFileInfo(target).absolutePath()).filePath(QStringLiteral(".nordssh-download-XXXXXX.part")));
+    if (!output.open()) bad();
     vault::protectLocalHandle(output.handle());
 #ifndef _WIN32
     if (!output.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)) bad();
@@ -175,7 +175,14 @@ void SftpClient::download(const std::string& remote, const QString& root, const 
     const QFileInfo current(localPath(root, relative));
     if (current.exists() != initial.exists() || (initial.exists() &&
         (current.size() != initial.size() || current.lastModified() != initial.lastModified()))) bad();
-    deadline.check(); if (!output.commit()) bad();
+    if (!output.flush()) bad();
+    vault::syncLocalHandle(output.handle());
+    deadline.check();
+    // QTemporaryFile guarantees atomic rename without QFile's copy/delete
+    // fallback. Its non-overwrite form closes the final check/rename race.
+    const bool published = initial.exists() ? output.renameOverwrite(target) : output.rename(target);
+    if (!published) bad();
+    output.setAutoRemove(false);
 }
 void SftpClient::upload(const QString& root, const QString& relative, const std::string& remote,
                         bool confirmed, Progress progress, OperationControl control) {
