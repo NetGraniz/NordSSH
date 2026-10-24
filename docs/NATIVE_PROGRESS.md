@@ -655,3 +655,42 @@ clipboard, Windows-to-Linux real-TUI SSH acceptance, clean-machine packaging,
 or the full original release matrix. Those remain explicit acceptance work.
 No native installer or user release is published. Connection/data engineering
 can continue without representing the current library/tests as an application.
+
+## Connection engineering: cancellation and lifecycle, 2026-10-24
+
+Started the next large block without waiting for a user approval of individual
+patches. Session now uses nonblocking libssh operations and bounded poll slices
+(up to 25 ms), absolute operation deadlines and stop tokens. Default network
+budget is 5 s, maximum admitted budget 30 s. The API only accepts pre-resolved
+numeric transport addresses; logical host/port/user remain bound to actual host
+identity. The old implicit DNS connect entry point was removed, not left as a
+GUI hazard. Async resolution/controller work is still pending. Scoped IPv6 is
+not admitted by the initial numeric parser.
+
+Added cancellable password/key authentication, PTY creation/resize, bounded
+write/flush and idle read. Per-call writes remain capped at 64 KiB. All existing
+password/key/user-certificate and SSH terminal fixtures still pass. Private-key
+decoding is synchronous bounded worker work, with cancellation checked before
+import and before network authentication, not inside the third-party KDF.
+
+`ssh_cancellation` exercises 12 loopback cases with real stalled banner/auth
+servers, pre-cancelled operations and idle read cancellation. Server-side counters
+verify zero early network/password/input writes where required. Stalled-password
+cancellation is synchronized to server receipt over a test-only control pipe;
+a sleep-based initial test correctly observed cancellation before password send
+and was replaced with that explicit synchronization. Deadline auth can expire
+during service negotiation, so zero or one password request is valid there.
+
+ConnectionAttempt adds a separate UI-owner state gate: immutable attempt ids,
+one-shot trust challenges, endpoint/key binding, cached-pin checks, no changed-key
+override, approval-time deadline rechecks, cancellation tokens and immutable
+terminal outcomes. Stale worker/dialog messages cannot reopen a cancelled
+request. The class stores no credential and does not itself make a connection.
+The worker must still call Session::authorizeHost with its returned identity.
+
+Final local Windows Debug combined CTest: **17/17 in 36.07 s**. This includes
+all previous crypto/SSH/Qt tests, 12 cancel/deadline modes and lifecycle negative
+tests. Linux sanitizer/SSH validation follows the next push. See ADR 0002 for
+the contract and limits. A bounded async ConnectionManager, command/output
+queues, key-import scheduling, native trust/auth UI and 2FA are still required.
+This is not a native application release or a user-test invitation.

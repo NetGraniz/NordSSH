@@ -27,7 +27,7 @@ int main(int argc,char** argv) {
         require(port>1024 && port<=65535,"Fixture port outside loopback test range");
         const std::string mode=argv[3];
         Session client;
-        client.connect({"127.0.0.1",static_cast<std::uint16_t>(port),"fixture-user"});
+        client.connectResolved({"127.0.0.1",static_cast<std::uint16_t>(port),"fixture-user"}, "127.0.0.1");
         auto identity=client.hostIdentity();
         require(fingerprint(identity.sha256)==argv[2],"Fixture host fingerprint mismatch");
         if(mode=="untrusted") {
@@ -38,7 +38,7 @@ int main(int argc,char** argv) {
             reject([&]{client.authenticatePassword("synthetic-ssh-password");},"Authentication after changed key rejection");
         } else if(mode=="replay") {
             Session other;
-            other.connect(identity.endpoint);
+            other.connectResolved(identity.endpoint, "127.0.0.1");
             reject([&]{other.authorizeHost(identity);},"Host decision replayed across connections");
         } else {
             client.authorizeHost(identity);

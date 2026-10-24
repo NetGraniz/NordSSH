@@ -5,6 +5,13 @@
 #include <cstring>
 #include <memory>
 #include <openssl/rand.h>
+#include <cerrno>
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <poll.h>
+#endif
 
 namespace nordssh::ssh {
 namespace {
@@ -39,8 +46,57 @@ void Session::require(State state) const { owner(); if(state_!=state) throw Sess
 void Session::checked(int result) {
     if (result!=SSH_OK) { state_=State::Failed; throw SessionError(); }
 }
-void Session::connect(const Endpoint& endpoint) {
+[[noreturn]] void Session::failed() { state_ = State::Failed; throw SessionError(); }
+void Session::checkpoint(const OperationControl& control) {
+    const auto now = std::chrono::steady_clock::now();
+    if (control.stop.stop_requested() || now >= control.deadline || control.deadline - now > std::chrono::seconds(30)) failed();
+}
+bool Session::waitReady(const OperationControl& control) {
+    if (control.stop.stop_requested()) failed();
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= control.deadline) return false;
+    if (control.deadline - now > std::chrono::seconds(30)) failed();
+    const int wait = static_cast<int>(std::clamp<std::int64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(control.deadline - now).count(), 1, 25));
+    const auto socket = ssh_get_fd(session_);
+    if (socket == SSH_INVALID_SOCKET) failed();
+    const int flags = ssh_get_poll_flags(session_);
+    short events = 0;
+    if (flags & SSH_READ_PENDING) events |= POLLIN;
+    if (flags & SSH_WRITE_PENDING) events |= POLLOUT;
+    if (!events) events = POLLIN;
+#ifdef _WIN32
+    WSAPOLLFD descriptor{socket, events, 0};
+    const int result = WSAPoll(&descriptor, 1, wait);
+    if (result == SOCKET_ERROR && WSAGetLastError() != WSAEINTR) failed();
+#else
+    pollfd descriptor{socket, events, 0};
+    const int result = poll(&descriptor, 1, wait);
+    if (result < 0 && errno != EINTR) failed();
+#endif
+    if (control.stop.stop_requested()) failed();
+    return true;
+}
+int Session::retry(const std::function<int()>& operation, int again, const OperationControl& control) {
+    while (true) {
+        checkpoint(control);
+        const int result = operation();
+        if (result != again) return result;
+        if (!waitReady(control)) failed();
+    }
+}
+void Session::connectResolved(const Endpoint& endpoint, std::string_view address, OperationControl control) {
     require(State::New);
+    if (address.empty() || address.size() >= INET6_ADDRSTRLEN || address.find('\0') != std::string_view::npos) failed();
+    const std::string numeric(address);
+    std::array<unsigned char, 16> storage{};
+    if (inet_pton(AF_INET, numeric.c_str(), storage.data()) != 1 &&
+        inet_pton(AF_INET6, numeric.c_str(), storage.data()) != 1) failed();
+    connectImpl(endpoint, numeric, control);
+}
+void Session::connectImpl(const Endpoint& endpoint, std::string_view address, const OperationControl& control) {
+    require(State::New);
+    checkpoint(control);
     if (!validText(endpoint.host,253) || !validText(endpoint.user,128) || endpoint.port==0) throw SessionError();
     endpoint_=endpoint;
     const int processConfig=0, logging=SSH_LOG_NOLOG;
@@ -48,7 +104,8 @@ void Session::connect(const Endpoint& endpoint) {
     const long timeout=5;
     checked(ssh_options_set(session_,SSH_OPTIONS_PROCESS_CONFIG,&processConfig));
     checked(ssh_options_set(session_,SSH_OPTIONS_LOG_VERBOSITY,&logging));
-    checked(ssh_options_set(session_,SSH_OPTIONS_HOST,endpoint.host.c_str()));
+    const std::string transportHost(address);
+    checked(ssh_options_set(session_,SSH_OPTIONS_HOST,transportHost.c_str()));
     checked(ssh_options_set(session_,SSH_OPTIONS_PORT,&port));
     checked(ssh_options_set(session_,SSH_OPTIONS_USER,endpoint.user.c_str()));
     checked(ssh_options_set(session_,SSH_OPTIONS_TIMEOUT,&timeout));
@@ -61,7 +118,8 @@ void Session::connect(const Endpoint& endpoint) {
         "rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256-cert-v01@openssh.com"));
     const int minimumRsaBits=2048;
     checked(ssh_options_set(session_,SSH_OPTIONS_RSA_MIN_SIZE,&minimumRsaBits));
-    checked(ssh_connect(session_));
+    ssh_set_blocking(session_, 0);
+    checked(retry([&] { return ssh_connect(session_); }, SSH_AGAIN, control));
     state_=State::Connected;
 }
 HostIdentity Session::hostIdentity() const {
@@ -92,18 +150,20 @@ void Session::authorizeHost(const HostIdentity& approved) {
     }
     state_=State::Trusted;
 }
-void Session::authenticatePassword(std::string_view password) {
+void Session::authenticatePassword(std::string_view password, OperationControl control) {
     require(State::Trusted);
+    checkpoint(control);
     if (password.empty() || password.size()>4096 || password.find('\0')!=std::string_view::npos) throw SessionError();
     vault::SecretBytes terminated(password.size()+1);
     std::memcpy(terminated.bytes().data(),password.data(),password.size());
     const auto* text=reinterpret_cast<const char*>(terminated.bytes().data());
-    if (ssh_userauth_password(session_,nullptr,text)!=SSH_AUTH_SUCCESS) { state_=State::Failed; throw SessionError(); }
+    if (retry([&] { return ssh_userauth_password(session_,nullptr,text); }, SSH_AUTH_AGAIN, control) != SSH_AUTH_SUCCESS) failed();
     state_=State::Authenticated;
 }
 void Session::authenticatePrivateKey(std::string_view privateKey, std::string_view passphrase,
-                                    std::string_view certificate) {
+                                    std::string_view certificate, OperationControl control) {
     require(State::Trusted); // Before parsing keys, prompting or transmitting authentication.
+    checkpoint(control);
     try {
         const auto admittedHash=admitOpenSshKey(privateKey);
         auto keyText=terminatedSecret(privateKey,1048576),phrase=terminatedSecret(passphrase,4096);
@@ -144,43 +204,52 @@ void Session::authenticatePrivateKey(std::string_view privateKey, std::string_vi
             std::unique_ptr<ssh_key_struct,decltype(&ssh_key_free)> cert(rawCertificate,&ssh_key_free);
             if(imported!=SSH_OK||!cert||ssh_pki_copy_cert_to_privkey(cert.get(),key.get())!=SSH_OK)throw SessionError();
         }
-        if(ssh_userauth_publickey(session_,nullptr,key.get())!=SSH_AUTH_SUCCESS)throw SessionError();
+        if(retry([&] { return ssh_userauth_publickey(session_,nullptr,key.get()); }, SSH_AUTH_AGAIN, control)!=SSH_AUTH_SUCCESS)throw SessionError();
         state_=State::Authenticated;
     } catch(...) {state_=State::Failed;throw;}
 }
-void Session::openShell(int columns,int rows) {
+void Session::openShell(int columns,int rows, OperationControl control) {
     require(State::Authenticated); dimensions(columns,rows);
+    checkpoint(control);
     channel_=ssh_channel_new(session_);
     if (!channel_) { state_=State::Failed; throw SessionError(); }
-    checked(ssh_channel_open_session(channel_));
-    checked(ssh_channel_request_pty_size(channel_,"xterm-256color",columns,rows));
-    checked(ssh_channel_request_shell(channel_));
+    checked(retry([&] { return ssh_channel_open_session(channel_); }, SSH_AGAIN, control));
+    checked(retry([&] { return ssh_channel_request_pty_size(channel_,"xterm-256color",columns,rows); }, SSH_AGAIN, control));
+    checked(retry([&] { return ssh_channel_request_shell(channel_); }, SSH_AGAIN, control));
     state_=State::Shell;
 }
-void Session::resize(int columns,int rows) {
+void Session::resize(int columns,int rows, OperationControl control) {
     require(State::Shell); dimensions(columns,rows);
-    checked(ssh_channel_change_pty_size(channel_,columns,rows));
+    checked(retry([&] { return ssh_channel_change_pty_size(channel_,columns,rows); }, SSH_AGAIN, control));
 }
-void Session::write(std::span<const std::byte> bytes) {
+void Session::write(std::span<const std::byte> bytes, OperationControl control) {
     require(State::Shell);
     if(bytes.size()>65536) throw SessionError();
     std::size_t written=0;
     while(written<bytes.size()) {
+        checkpoint(control);
         const auto result=ssh_channel_write(channel_,bytes.data()+written,static_cast<std::uint32_t>(bytes.size()-written));
-        if(result<=0) { state_=State::Failed; throw SessionError(); }
+        if (result == 0 || result == SSH_AGAIN) { if (!waitReady(control)) failed(); continue; }
+        if(result<0 || static_cast<std::size_t>(result) > bytes.size() - written) failed();
         written+=static_cast<std::size_t>(result);
     }
+    checked(retry([&] { return ssh_blocking_flush(session_, 0); }, SSH_AGAIN, control));
 }
-std::vector<std::byte> Session::read(int timeoutMilliseconds) {
+std::vector<std::byte> Session::read(int timeoutMilliseconds, std::stop_token stop) {
     require(State::Shell);
     if(timeoutMilliseconds<0 || timeoutMilliseconds>1000) throw SessionError();
     std::vector<std::byte> result(65536);
-    const auto count=ssh_channel_read_timeout(channel_,result.data(),65536,0,timeoutMilliseconds);
-    // libssh 0.12.2 documents SSH_AGAIN on timeout, even for this bounded
-    // blocking read. An idle shell is not a failed/disconnected session.
-    if(count==SSH_AGAIN) return {};
-    if(count<0) { state_=State::Failed; throw SessionError(); }
-    result.resize(static_cast<std::size_t>(count));
-    return result;
+    OperationControl control{stop, std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMilliseconds)};
+    while (true) {
+        if (stop.stop_requested()) failed();
+        const auto count = ssh_channel_read_nonblocking(channel_, result.data(), 65536, 0);
+        if (count > 0) { result.resize(static_cast<std::size_t>(count)); return result; }
+        if (count != 0 && count != SSH_AGAIN) failed();
+        if (closed() || !waitReady(control)) return {};
+    }
+}
+bool Session::closed() const {
+    require(State::Shell);
+    return ssh_is_connected(session_) == 0 || ssh_channel_is_eof(channel_) != 0;
 }
 } // namespace nordssh::ssh

@@ -156,3 +156,12 @@ cross-process QClipboard transfer on an explicitly isolated Xvfb display. It
 refuses to run without `NORDSSH_ISOLATED_DESKTOP=1`; never point this fixture at
 a user's desktop. Both US and Russian layouts stay configured during group
 switching. This does not prove Windows native input or Wayland physical input.
+
+The SSH worker core now admits only a resolved numeric transport address while
+retaining the logical endpoint for host trust. Network operations accept a stop
+token/deadline and use nonblocking libssh with poll slices up to 25 ms. This is
+still a synchronous worker API, not a GUI connection manager. `ssh_cancellation`
+checks twelve isolated stall/cancel/deadline modes; `connection_attempt` checks
+request-bound one-shot host decisions, cached/changed keys, late messages and
+immutable close outcomes. See [ADR 0002](../docs/adr/0002-connection-control.md)
+for limits and the remaining async-controller work.

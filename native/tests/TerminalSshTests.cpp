@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
             const char* stage = "connect";
             try {
                 nordssh::ssh::Session client;
-                client.connect({"127.0.0.1", static_cast<std::uint16_t>(port), "fixture-user"});
+                client.connectResolved({"127.0.0.1", static_cast<std::uint16_t>(port), "fixture-user"}, "127.0.0.1");
                 const auto identity = client.hostIdentity();
                 stage = "host approval";
                 require(fingerprint(identity.sha256) == pinned, "Fixture host key mismatch");
