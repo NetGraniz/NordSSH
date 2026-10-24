@@ -872,3 +872,18 @@ commit applies finalPermissions after native fchmod: protect the temporary inode
 AND set QSaveFile's final owner-only policy. The first run is failed, not accepted.
 The private-keyring readiness test now uses D-Bus NameHasOwner without auto-start,
 so it cannot launch a keyring daemon using the bus's inherited non-test HOME.
+
+Follow-up Linux run **40104297548** at a736961 is green: standalone Qt/VT/DNS
+13/13, real xcb/Wayland TUI and isolated X11 input, full-stack ASan/UBSan **25/25
+in 68.70 s**, including actual disposable Secret Service (12.33 s) and private
+vault persistence (25.82 s). No sanitizer suppression was added.
+
+Next increment implements worker SessionWork, bounded TransferManager and SFTP
+CRUD/upload/download/tree operations, private local/exclusive remote staging,
+explicit overwrite and timeout/cancellation. Windows six-mode SFTP fixture passed
+in 15.70 s. Implemented local TCP forwarding and composed jump connections;
+Windows four-mode forwarding fixture passed in 17.41 s, including four concurrent
+binary streams, half-close, a destination DNS name not resolved locally, independent
+keys, rejected jump trust and changed destination trust before credentials.
+See ADR 0005 for bounds, remote commit uncertainty and transport discard policy.
+The final whole-stack regression and real OpenSSH gate are still pending.

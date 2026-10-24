@@ -25,6 +25,8 @@ struct ConnectionState {
     std::optional<AuthenticationPrompt> interactive;
     std::optional<Session::InteractiveAnswers> answers;
     std::chrono::seconds keepAlive{30};
+    std::shared_ptr<SessionWork> work;
+    std::optional<std::uint16_t> loopbackTunnel;
     std::optional<std::pair<int, int>> dimensions;
     ConnectionAttempt::Clock::time_point authenticationDeadline{};
     bool authenticated = false;
@@ -67,7 +69,8 @@ void runConnection(const std::shared_ptr<detail::ConnectionState>& state) noexce
             const auto budget = (std::min)(state->connectDeadline, now + (std::max)(share,
                 std::chrono::duration_cast<Clock::duration>(250ms)));
             try {
-                candidate->connectResolved(state->endpoint, state->addresses[index], {state->stop.get_token(), budget});
+                if (state->loopbackTunnel) candidate->connectLoopbackTunnel(state->endpoint, *state->loopbackTunnel, {state->stop.get_token(), budget});
+                else candidate->connectResolved(state->endpoint, state->addresses[index], {state->stop.get_token(), budget});
                 session = std::move(candidate);
                 break;
             } catch (const SessionError&) {
@@ -114,6 +117,10 @@ void runConnection(const std::shared_ptr<detail::ConnectionState>& state) noexce
             }, {state->stop.get_token(), deadline});
         } // All password/key material released before the shell loop.
         failure = AttemptReason::Network;
+        if (state->work) {
+            { std::lock_guard lock(state->mutex); state->authenticated = true; }
+            state->work->run(*session, state->stop.get_token());
+        } else {
         std::pair<int, int> dimensions;
         {
             std::lock_guard lock(state->mutex);
@@ -145,6 +152,7 @@ void runConnection(const std::shared_ptr<detail::ConnectionState>& state) noexce
                 // readiness is sampled at 10 ms, not by a hot retry loop.
                 state->wake.wait_for(lock, 10ms);
             }
+        }
         }
         failure = AttemptReason::None;
     } catch (...) {
@@ -266,12 +274,12 @@ ConnectionStatus ConnectionManager::status() const {
         state_ ? state_->output.usage().bytes : 0};
 }
 bool ConnectionManager::start(const Endpoint& endpoint, const std::optional<TrustedHostPin>& saved,
-                              AttemptTimeouts timeouts, int columns, int rows) {
+                              AttemptTimeouts timeouts, int columns, int rows, std::shared_ptr<SessionWork> work, std::optional<std::uint16_t> loopbackTunnel) {
     owner();
     const auto previous = status();
     if (!runtime_ || runtime_->stopping() || runtime_->workers() >= ConnectionRuntime::MaxWorkers ||
         (attempt_ && (!previous.settled || !terminal(previous.phase))) || !dimensionsValid(columns, rows) ||
-        endpoint.user.empty() || endpoint.user.size() > 128 || !endpoint.port) return false;
+        endpoint.user.empty() || endpoint.user.size() > 128 || !endpoint.port || (loopbackTunnel && !*loopbackTunnel)) return false;
     const auto host = HostResolver::canonicalHost(endpoint.host);
     if (!host || (saved && (saved->host.size() > 253 || saved->algorithm.empty() || saved->algorithm.size() > 128))) return false;
     Endpoint canonical{*host, endpoint.port, endpoint.user};
@@ -282,10 +290,12 @@ bool ConnectionManager::start(const Endpoint& endpoint, const std::optional<Trus
     reserved_ = true;
     endpoint_ = std::move(canonical); saved_ = saved; timeouts_ = timeouts;
     columns_ = columns; rows_ = rows;
+    work_ = std::move(work);
+    loopbackTunnel_ = loopbackTunnel;
     attempt_ = std::move(attempt); state_.reset();
     seenHost_ = seenAuth_ = approvalSent_ = authSent_ = false;
     const auto id = attempt_->id();
-    const auto started = resolver_.start(id, endpoint_.host, attempt_->deadline(), [this, id](Resolution result) {
+    const auto started = resolver_.start(id, loopbackTunnel_ ? "127.0.0.1" : endpoint_.host, attempt_->deadline(), [this, id](Resolution result) {
         if (!attempt_ || attempt_->id() != id || attempt_->phase() != AttemptPhase::Connecting) return;
         attempt_->tick();
         if (attempt_->stopToken().stop_requested()) return;
@@ -298,6 +308,8 @@ bool ConnectionManager::start(const Endpoint& endpoint, const std::optional<Trus
         state_ = std::make_shared<detail::ConnectionState>();
         state_->endpoint = endpoint_; state_->addresses = std::move(result.addresses);
         state_->request = id; state_->keepAlive = keepAlive_;
+        state_->work = work_;
+        state_->loopbackTunnel = loopbackTunnel_;
         state_->connectDeadline = attempt_->deadline(); state_->timeouts = timeouts_;
         state_->dimensions = {columns_, rows_};
         const bool launched = runtime_ && runtime_->launch(state_);
@@ -436,11 +448,12 @@ bool ConnectionManager::setKeepAlive(std::chrono::seconds interval) {
 bool ConnectionManager::send(std::span<const std::byte> bytes) {
     owner();
     poll(); // Observe a just-finished peer before accepting more terminal input.
-    if (!attempt_ || attempt_->phase() != AttemptPhase::Active || !state_ || !state_->input.tryPush(bytes)) return false;
+    if (work_ || !attempt_ || attempt_->phase() != AttemptPhase::Active || !state_ || !state_->input.tryPush(bytes)) return false;
     state_->wake.notify_all(); return true;
 }
 bool ConnectionManager::resize(int columns, int rows) {
     owner();
+    if (work_) return false;
     if (!dimensionsValid(columns, rows) || !attempt_ || terminal(attempt_->phase()) || attempt_->phase() == AttemptPhase::Closing) return false;
     columns_ = columns; rows_ = rows;
     if (state_) {

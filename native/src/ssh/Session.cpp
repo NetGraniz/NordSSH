@@ -83,7 +83,8 @@ void Session::authenticateInteractive(const InteractiveResponder& respond, Opera
     } catch (...) { state_ = State::Failed; throw; }
 }
 void Session::keepAlive(OperationControl control) {
-    require(State::Shell);
+    owner();
+    if (state_ != State::Shell && state_ != State::Authenticated && state_ != State::Service) throw SessionError();
     checkpoint(control);
     checked(ssh_send_ignore(session_, "NordSSH"));
     checked(retry([&] { return ssh_blocking_flush(session_, 0); }, SSH_AGAIN, control));
@@ -96,6 +97,7 @@ Session::Session() {
     if (!session_) throw SessionError();
 }
 Session::~Session() {
+    if (session_) ssh_set_blocking(session_, 0);
     if (channel_) ssh_channel_free(channel_);
     if (session_) { ssh_disconnect(session_); ssh_free(session_); }
 }
@@ -152,13 +154,18 @@ void Session::connectResolved(const Endpoint& endpoint, std::string_view address
         inet_pton(AF_INET6, numeric.c_str(), storage.data()) != 1) failed();
     connectImpl(endpoint, numeric, control);
 }
-void Session::connectImpl(const Endpoint& endpoint, std::string_view address, const OperationControl& control) {
+void Session::connectLoopbackTunnel(const Endpoint& endpoint, std::uint16_t localPort, OperationControl control) {
+    require(State::New);
+    if (!localPort) failed();
+    connectImpl(endpoint, "127.0.0.1", control, localPort);
+}
+void Session::connectImpl(const Endpoint& endpoint, std::string_view address, const OperationControl& control, std::uint16_t transportPort) {
     require(State::New);
     checkpoint(control);
     if (!validText(endpoint.host,253) || !validText(endpoint.user,128) || endpoint.port==0) throw SessionError();
     endpoint_=endpoint;
     const int processConfig=0, logging=SSH_LOG_NOLOG;
-    const unsigned int port=endpoint.port;
+    const unsigned int port=transportPort ? transportPort : endpoint.port;
     const long timeout=5;
     checked(ssh_options_set(session_,SSH_OPTIONS_PROCESS_CONFIG,&processConfig));
     checked(ssh_options_set(session_,SSH_OPTIONS_LOG_VERBOSITY,&logging));
@@ -298,12 +305,16 @@ void Session::write(std::span<const std::byte> bytes, OperationControl control) 
     checked(retry([&] { return ssh_blocking_flush(session_, 0); }, SSH_AGAIN, control));
 }
 bool Session::flushSome(std::stop_token stop) {
-    require(State::Shell);
+    owner();
+    if (state_ != State::Shell && state_ != State::Service) throw SessionError();
     if (stop.stop_requested()) failed();
     const auto result = ssh_blocking_flush(session_, 0);
     if (result == SSH_AGAIN) return false;
     checked(result);
     return true;
+}
+bool Session::transportActive() const {
+    owner(); return state_ != State::New && state_ != State::Failed && ssh_is_connected(session_) != 0;
 }
 std::size_t Session::writeSome(std::span<const std::byte> bytes, std::stop_token stop) {
     require(State::Shell);

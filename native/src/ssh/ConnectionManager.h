@@ -28,6 +28,13 @@ struct ConnectionStatus {
     bool settled = true; // Actual session/key buffers destroyed, not merely cancelled.
     std::size_t pendingOutputBytes = 0;
 };
+// Worker-owned service task. No GUI pointers/callbacks; use bounded typed
+// mailboxes. Runs only AFTER this connection's host approval and authentication.
+class SessionWork {
+public:
+    virtual ~SessionWork() = default;
+    virtual void run(Session&, std::stop_token) = 0;
+};
 
 // App-owned registry, outliving tabs. Normal shutdown is asynchronous: call
 // shutdown(), keep the event loop alive until idle(), then quit the application.
@@ -59,7 +66,8 @@ public:
     explicit ConnectionManager(ConnectionRuntime& runtime, QObject* parent = nullptr);
     ~ConnectionManager() override;
     bool start(const Endpoint& endpoint, const std::optional<TrustedHostPin>& saved = {},
-               AttemptTimeouts timeouts = {}, int columns = 80, int rows = 24);
+               AttemptTimeouts timeouts = {}, int columns = 80, int rows = 24,
+               std::shared_ptr<SessionWork> work = {}, std::optional<std::uint16_t> loopbackTunnel = {});
     [[nodiscard]] ConnectionStatus status() const;
     [[nodiscard]] std::optional<HostPrompt> hostPrompt();
     bool approve(AttemptId request, AttemptId challenge);
@@ -89,5 +97,7 @@ private:
     bool seenHost_ = false, seenAuth_ = false, approvalSent_ = false, authSent_ = false;
     bool reserved_ = false;
     std::chrono::seconds keepAlive_{30};
+    std::shared_ptr<SessionWork> work_;
+    std::optional<std::uint16_t> loopbackTunnel_;
 };
 } // namespace nordssh::ssh

@@ -47,6 +47,9 @@ public:
     // Resolve asynchronously in the controller; preserve the logical endpoint
     // for trust while connecting only to this validated numeric address.
     void connectResolved(const Endpoint& endpoint, std::string_view address, OperationControl control = {});
+    // User-configured jump route. TCP reaches only this IPv4 loopback listener;
+    // trust/auth identity remains the ORIGINAL destination host/port/user.
+    void connectLoopbackTunnel(const Endpoint& endpoint, std::uint16_t localPort, OperationControl control = {});
     [[nodiscard]] HostIdentity hostIdentity() const;
     // Caller must complete the application's challenge/changed-key policy first.
     // This rechecks the actual connected key; no unbound bool "trusted" flag.
@@ -74,8 +77,12 @@ public:
                                      std::stop_token stop = {});
     [[nodiscard]] std::vector<std::byte> read(int timeoutMilliseconds = 100, std::stop_token stop = {});
     [[nodiscard]] bool closed() const;
+    [[nodiscard]] bool transportActive() const;
 private:
-    enum class State { New, Connected, Trusted, Authenticated, Shell, Failed };
+    friend class SftpClient;
+    friend class TransportDeadline;
+    friend class DirectChannel;
+    enum class State { New, Connected, Trusted, Authenticated, Shell, Service, Failed };
     void owner() const;
     void checked(int result);
     void require(State state) const;
@@ -83,7 +90,7 @@ private:
     void checkpoint(const OperationControl& control);
     bool waitReady(const OperationControl& control);
     int retry(const std::function<int()>& operation, int again, const OperationControl& control);
-    void connectImpl(const Endpoint& endpoint, std::string_view address, const OperationControl& control);
+    void connectImpl(const Endpoint& endpoint, std::string_view address, const OperationControl& control, std::uint16_t transportPort = 0);
     ssh_session session_{};
     ssh_channel channel_{};
     Endpoint endpoint_{};
