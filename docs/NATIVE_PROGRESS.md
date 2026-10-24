@@ -933,3 +933,19 @@ A red test reproduced the PrivateFiles basename admission; strict `\A...\z`
 anchors now guard filenames and device identities. Windows persistence/device
 tests passed **2/2 in 2.86 s** after the fix. Tests contain only fresh synthetic
 data; no existing user's vault, backup or OS keyring item was inspected.
+
+## Stage 2 accepted, 2026-10-24
+
+Implementation **54fc51ba88f9edf4e728636e88299713d6b3ce8b**:
+Windows Release **28/28 in 162.91 s**; Linux full-stack ASan/UBSan run
+**40108221514, 29/29 in 108.44 s**, including real RSA-SHA2 OpenSSH, actual
+full-filesystem rollback, permission-denied rename and private Secret Service.
+Standalone Qt/VT/DNS **13/13**, xcb/Wayland TUI and isolated X11 input also pass.
+Native core run **40108220623** is green in all four jobs. Earlier Ed25519
+OpenSSH run **40107531945** passed 29/29 in 83.43 s after the EOF fix.
+
+The complete module acceptance and remaining limits are in
+NATIVE_STAGE_2_ACCEPTANCE.md. Stage 2 is complete; three major stages remain:
+full Qt UI integration, verified native distribution/updates, final acceptance.
+No native user release/installer has been published. Do not ask the owner to test
+the development-runtime EXE or present the module gate as a finished application.
