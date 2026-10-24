@@ -201,7 +201,10 @@ VaultDocument parseDocument(std::span<const std::byte> payload) {
         fields(n,{"host","port","algorithm","sha256"}); TrustRecord pin;
         pin.host=text(n,"host",253); hostName(pin.host); pin.port=number(n,"port",1,65535); pin.algorithm=text(n,"algorithm",128); pin.sha256=text(n,"sha256",64);
         if(pin.sha256.size()!=64||std::ranges::any_of(pin.sha256,[](char c){return !((c>='0'&&c<='9')||(c>='a'&&c<='f'));})||!pins.insert({pin.host,pin.port}).second) bad();
-        if(pin.algorithm!="ssh-ed25519"&&pin.algorithm!="ecdsa-sha2-nistp256"&&pin.algorithm!="ecdsa-sha2-nistp384"&&pin.algorithm!="ecdsa-sha2-nistp521"&&pin.algorithm!="rsa-sha2-256"&&pin.algorithm!="rsa-sha2-512") bad();
+        // Stable public-key FORMAT, not the negotiated signature hash. RFC 8332
+        // keeps the ssh-rsa blob for RSA-SHA2. Session's negotiation policy still
+        // excludes SHA-1 ssh-rsa signatures; recording this label does not enable them.
+        if(pin.algorithm!="ssh-ed25519"&&pin.algorithm!="ecdsa-sha2-nistp256"&&pin.algorithm!="ecdsa-sha2-nistp384"&&pin.algorithm!="ecdsa-sha2-nistp521"&&pin.algorithm!="ssh-rsa") bad();
         doc.knownHosts.push_back(std::move(pin));
     }
     for(const auto& n:collection(root,"snippets",1000)) {

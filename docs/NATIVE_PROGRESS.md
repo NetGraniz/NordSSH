@@ -919,3 +919,11 @@ Pinned libssh channels.c returns SSH_EOF from read_nonblocking after normal EOF;
 the new DirectChannel omitted this case, while the established shell reader
 already handled it. Fixed the direct-channel EOF case and added defensive result
 bounds; real OpenSSH is rerun before accepting the stage.
+
+Review also found an RSA host-pin schema mismatch: libssh reports the stable
+`ssh-rsa` public-key format even when the negotiated signature is RSA-SHA2
+(RFC 8332 sections 2–3). The schema now admits that key format, rejects signature
+scheme labels as pin identities and retains Session's SHA-1-excluding negotiation
+policy. The real OpenSSH fixture now uses a 2048-bit RSA host key with ONLY
+rsa-sha2-512/256 host algorithms; Ed25519 hosts remain covered by all loopback
+fixtures. This checks the distinction without enabling a SHA-1 fallback.

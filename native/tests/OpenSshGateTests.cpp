@@ -25,6 +25,7 @@ int main(int argc,char** argv) {
                 std::cout<<"Real OpenSSH phase: transport\n";
                 session.connectResolved({"openssh.fixture.invalid",port,user},"127.0.0.1");
                 const auto identity=session.hostIdentity();
+                require(identity.algorithm=="ssh-rsa"); // RSA-SHA2 retains this public-key format.
                 require(QByteArray(reinterpret_cast<const char*>(identity.sha256.data()),32).toHex().toStdString()==fingerprint);
                 if(mode!="untrusted") session.authorizeHost(identity);
                 std::cout<<"Real OpenSSH phase: approved-key authentication\n";

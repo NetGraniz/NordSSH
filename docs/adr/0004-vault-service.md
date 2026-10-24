@@ -7,6 +7,12 @@ record/reference schema before publication. Temporary decoded JSON values use
 cleansed buffers. A saved credential binds an exact canonical host, port and user;
 editing a host cannot silently carry its old secret to a different endpoint.
 
+Known-host `algorithm` records the stable public-key format, as libssh reports it.
+RSA-SHA2 retains the `ssh-rsa` key blob/label under RFC 8332; this is not permission
+to negotiate the deprecated SHA-1 signature scheme. Session's explicit host-key
+and user-auth signature allowlists still exclude SHA-1. Pinning a negotiated hash
+instead of key format would also cause false changed-key errors across SHA2 choices.
+
 VaultService owns one unlocked document on a non-GUI worker. Independent vaults
 have independent random DEKs and passwords. Failed unlock/switch/import leaves the
 previous model untouched. Session leases refuse lock/switch/import while in use.

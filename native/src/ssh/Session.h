@@ -19,7 +19,7 @@ namespace nordssh::ssh {
 struct Endpoint { std::string host; std::uint16_t port; std::string user; };
 struct HostIdentity {
     Endpoint endpoint;
-    std::string algorithm;
+    std::string algorithm; // Stable public-key format (RSA-SHA2 uses ssh-rsa), not its signature hash.
     std::array<std::byte,32> sha256;
     std::array<std::byte,16> connectionId;
 };

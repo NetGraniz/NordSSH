@@ -61,7 +61,7 @@ async def main():
             original.chmod(0o600)
             (work/"linked").symlink_to(original)
             client=asyncssh.generate_private_key("ssh-ed25519")
-            host=asyncssh.generate_private_key("ssh-ed25519")
+            host=asyncssh.generate_private_key("ssh-rsa",key_size=2048)
             host_file=root/"host-key"
             host_file.write_bytes(host.export_private_key("openssh"))
             host_file.chmod(0o600)
@@ -80,6 +80,7 @@ async def main():
 ListenAddress 127.0.0.1
 AddressFamily inet
 HostKey {host_file}
+HostKeyAlgorithms rsa-sha2-512,rsa-sha2-256
 PidFile {root/'sshd.pid'}
 AuthorizedKeysFile {authorized}
 AllowUsers {user}

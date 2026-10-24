@@ -25,7 +25,9 @@ int main() {
         doc.hosts[0].port=0;reject([&]{(void)serializeDocument(doc);});doc.hosts[0].port=22;
         doc.groups[0].parent=doc.groups[0].id;reject([&]{(void)serializeDocument(doc);});doc.groups[0].parent.clear();
         doc.hosts[0].jump=doc.hosts[0].id;reject([&]{(void)serializeDocument(doc);});doc.hosts[0].jump.clear();
-        doc.knownHosts[0].algorithm="ssh-rsa";reject([&]{(void)serializeDocument(doc);});doc.knownHosts[0].algorithm="ssh-ed25519";
+        doc.knownHosts[0].algorithm="ssh-rsa";require(parseDocument(serializeDocument(doc).bytes()).knownHosts[0].algorithm=="ssh-rsa");
+        doc.knownHosts[0].algorithm="rsa-sha2-512";reject([&]{(void)serializeDocument(doc);});
+        doc.knownHosts[0].algorithm="ssh-dss";reject([&]{(void)serializeDocument(doc);});doc.knownHosts[0].algorithm="ssh-ed25519";
         doc.hosts[0].id=doc.groups[0].id;reject([&]{(void)serializeDocument(doc);});
         const std::string invalid="{\"schema\":1,\"hosts\":[],\"groups\":[],\"credentials\":[],\"known_hosts\":[],\"snippets\":[],\"settings\":{\"unknown\":true}}";
         reject([&]{(void)parseDocument(std::as_bytes(std::span(invalid)));});
