@@ -56,6 +56,12 @@ public:
     void openShell(int columns, int rows, OperationControl control = {});
     void resize(int columns, int rows, OperationControl control = {});
     void write(std::span<const std::byte> bytes, OperationControl control = {});
+    // Cooperative worker operations: one bounded attempt, no poll/retry loop.
+    // Flush before admitting another write to bound libssh's outgoing backlog.
+    [[nodiscard]] bool flushSome(std::stop_token stop = {});
+    [[nodiscard]] std::size_t writeSome(std::span<const std::byte> bytes, std::stop_token stop = {});
+    [[nodiscard]] std::size_t readSome(std::span<std::byte> destination, bool standardError = false,
+                                     std::stop_token stop = {});
     [[nodiscard]] std::vector<std::byte> read(int timeoutMilliseconds = 100, std::stop_token stop = {});
     [[nodiscard]] bool closed() const;
 private:

@@ -22,7 +22,10 @@ Writes retain the existing 64 KiB call cap and flush bounded outgoing data befor
 returning. Read timeout means idle, not failed; cancellation poisons the session.
 Private-key decoding/KDF is still a bounded synchronous worker operation: stop
 is checked before import and before authentication, not inside third-party KDF
-instructions. Process-wide key-import scheduling remains required.
+instructions. A process-wide admission gate now allows at most two SSH key
+imports, with cancellable deadline-limited waits in slices up to 25 ms. Its
+permit is released before network authentication. This is separate from the
+vault KDF's existing two-derivation gate, not a shared total of two crypto jobs.
 
 ## UI-owner lifecycle
 
@@ -45,9 +48,61 @@ instead of replacing it with a network error. Terminal outcomes are immutable.
 Destruction requests stop as well. Reconnect requires a new lifecycle and ids.
 
 This class stays on its UI owner. Only a copied stop token crosses into the worker.
-Host canonicalization, bounded command/output queues, DNS, worker scheduling,
-native dialogs, retry UI, keepalive and shutdown coordination remain to implement.
+Host canonicalization, asynchronous DNS and bounded terminal byte queues now
+have separate engineering components described below. Bounded control commands,
+worker scheduling, native dialogs, retry UI, keepalive and shutdown coordination
+remain to implement and integrate.
 The synchronous Session API must never be called directly from a GUI handler.
+
+## Bounded shell transport
+
+ByteQueue admits at most 1 MiB, 128 chunks, and 64 KiB per chunk. Both byte and
+node limits matter: one-byte messages cannot allocate an unbounded list. Push
+rejects the whole chunk before allocation when full; no truncated paste is sent.
+Queued bytes use move-only cleansed storage. Close permanently rejects new input
+and discards pending chunks. A consumer can additionally own one popped 64 KiB
+chunk; the pump has one reusable 64 KiB scratch buffer. These are application
+queue limits, not an absolute process-memory limit including libssh/Qt/OS buffers.
+
+ShellPump runs on the Session worker. One step attempts stdout and stderr reads
+of at most 64 KiB each, then one input write of at most 16 KiB. It does not loop
+waiting for a channel window. Before each write, a zero-time flush must clear
+previous pending socket output. A full GUI output queue stops all transport
+pumping, including flush/write calls which could otherwise receive more data
+inside libssh. Cancellation is checked before queue capacity and discards input.
+Output already queued on orderly EOF remains available for the GUI to drain.
+SSH stdout/stderr ordering is preserved within each stream; merging the two
+does not invent a cross-stream ordering guarantee.
+
+This pump is not a background thread or a ConnectionManager. A future scheduler
+must wait on idle/backpressure rather than spin; control/trust/cancel delivery
+must not share a possibly full data queue. It must own the session through actual
+worker teardown before reporting shutdown complete.
+
+## Asynchronous host resolution
+
+HostResolver uses Qt 6.12 QHostInfo::lookupHost on its event-loop owner, not
+blocking fromName. It has one active request and an absolute deadline of at most
+30 seconds. Literal addresses bypass DNS. Cancel and timeout invalidate an
+internal attempt ticket before any later result can be used, even if a caller
+reuses its external request id. Every DNS completion rechecks the deadline.
+Destroying the resolver aborts its lookup without calling the former owner.
+Qt/OS resolution work may finish internally after abort; its stale result cannot
+authorize a connection. This is application cancellation, not forcible thread kill.
+
+Canonical host admission lowercases ASCII DNS labels and removes a final root
+dot; numeric addresses use Qt's canonical representation. DNS labels are capped
+at 63 bytes, input at 253 bytes. Initial scope accepts ASCII/ACE hostnames,
+IPv4 and unscoped IPv6; raw Unicode, scoped addresses, URLs, userinfo, controls
+and malformed labels are rejected. Canonicalize before constructing the trust
+identity/ConnectionAttempt. Returned transport addresses are deduplicated,
+unscoped, and capped at eight. The DNS response's hostName never replaces the
+logical trust name. Address fallback/Happy Eyeballs and UI integration are pending.
+
+Reference: [Qt 6.12 QHostInfo](https://doc.qt.io/qt-6/qhostinfo.html), checked
+2026-10-24; nonblocking channel/flush semantics also inspected in pinned libssh
+0.12.2 sources. Injected DNS backends are an engineering test seam, not a product
+DNS substitute. Their completions are queued and bound to the supplied context.
 
 ## Verification scope
 

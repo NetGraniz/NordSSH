@@ -702,3 +702,41 @@ and lifecycle tests. The final local Windows combined run was **17/17 in 36.07 s
 Next connection work is the bounded async controller/queues, key-import admission,
 DNS and safe shutdown/native trust/auth integration. Continue those agreed
 tasks without asking the owner to approve every implementation increment.
+
+## 2026-10-24: bounded duplex transport and asynchronous DNS
+
+Repository checked clean on main at 3175eb1, expected NetGraniz/NordSSH origin,
+and a fresh git pull --ff-only succeeded before edits. No production SSH hosts,
+Minecraft files, user vaults, backups or signing keys were accessed.
+
+Added byte/chunk-bounded cleansed mailboxes and a cooperative worker shell pump.
+Zero-time read/write/flush operations avoid waiting for remote input consumption
+while its output needs draining. A full UI output queue pauses all packet pumping;
+cancel is checked before this pressure gate. Application queue limits are 1 MiB,
+128 nodes and 64 KiB per chunk, plus documented worker-local scratch/pending
+chunks. This does not claim an absolute libssh/Qt/process RSS ceiling.
+
+The real loopback fixture deliberately sends 3 MiB before reading 2 MiB of input.
+It verifies preserved bytes, drained stderr, bounded queues, eventual EOF and
+cancellation while output is full. An initial fixture incorrectly imposed global
+stdout/stderr ordering; it was corrected to verify per-stream ordering and a
+separate extended-data marker. This was a test assumption, not suppressed output.
+
+Added Qt asynchronous host resolution with ASCII/ACE canonicalization, one
+active request, at most eight unique unscoped addresses, absolute deadline
+rechecks and internal attempt tickets. Cancelled/expired/destroyed requests
+cannot publish a late result. DNS never replaces the logical SSH trust host.
+Deterministic injected replies cover cancellation, reused ids, delayed event-loop
+timers, malformed input and destruction; the actual Qt backend resolves localhost.
+Raw Unicode/scoped IPv6 and address fallback are explicitly outside this slice.
+
+SSH private-key imports now have a process-wide two-job gate, cancelled/bounded
+waits and permit release before network authentication. The third-party key
+decode itself remains noninterruptible. Vault KDF admission is a separate gate.
+
+Local Windows Debug combined CTest passed **21/21 in 45.84 s**. Linux validation
+follows the push. These are
+components, not a native client release: the async ConnectionManager, bounded
+control mailbox, safe app shutdown, native trust/auth dialogs, authentication
+retry/2FA and keepalive still need integration. Then continue the agreed vault,
+SFTP, application UI and distribution work without per-increment approval prompts.

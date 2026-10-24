@@ -165,3 +165,15 @@ checks twelve isolated stall/cancel/deadline modes; `connection_attempt` checks
 request-bound one-shot host decisions, cached/changed keys, late messages and
 immutable close outcomes. See [ADR 0002](../docs/adr/0002-connection-control.md)
 for limits and the remaining async-controller work.
+
+`byte_queue`, `shell_pump` and `key_import_permit` check bounded cleansed byte
+mailboxes, cooperative bidirectional SSH transport, cancellation under output
+pressure and process-wide SSH key-import admission. The loopback pump fixture
+drains 3 MiB of stdout and 2 MiB of input with an independent stderr marker;
+the server initially refuses to read input until it has drained its output.
+These are worker-component checks, not a completed background connection flow.
+
+`NORDSSH_BUILD_RESOLVER=ON` builds the separate Qt 6.12 Core/Network host resolver
+and `host_resolver` test. Deterministic fake DNS completions test stale tickets,
+absolute deadlines, filtering and destruction; the actual Qt backend is exercised
+against localhost only. The native Linux terminal workflow enables this gate.

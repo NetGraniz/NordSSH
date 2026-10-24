@@ -53,7 +53,7 @@ jobs:
       - name: Build Qt adapter and test-only driver
         id: adapter_build
         run: |
-          cmake -S native -B native/build-linux-terminal -DCMAKE_BUILD_TYPE=Debug -DNORDSSH_BUILD_TERMINAL=ON -DNORDSSH_BUILD_TUI_TESTS=ON -DNORDSSH_BUILD_VT_GATE=ON -DNORDSSH_GHOSTTY_SDK="$GITHUB_WORKSPACE/vt-source/zig-out" -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/qt-sdk"
+          cmake -S native -B native/build-linux-terminal -DCMAKE_BUILD_TYPE=Debug -DNORDSSH_BUILD_TERMINAL=ON -DNORDSSH_BUILD_TUI_TESTS=ON -DNORDSSH_BUILD_RESOLVER=ON -DNORDSSH_BUILD_VT_GATE=ON -DNORDSSH_GHOSTTY_SDK="$GITHUB_WORKSPACE/vt-source/zig-out" -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/qt-sdk"
           cmake --build native/build-linux-terminal --parallel 2
       - name: Component tests and actual offscreen TUI programs
         if: ${{ !cancelled() && steps.adapter_build.outcome == 'success' }}

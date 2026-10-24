@@ -1,5 +1,6 @@
 #include "Session.h"
 #include "KeyMaterial.h"
+#include "KeyImportPermit.h"
 #include "vault/VaultCrypto.h"
 #include <algorithm>
 #include <cstring>
@@ -165,45 +166,49 @@ void Session::authenticatePrivateKey(std::string_view privateKey, std::string_vi
     require(State::Trusted); // Before parsing keys, prompting or transmitting authentication.
     checkpoint(control);
     try {
-        const auto admittedHash=admitOpenSshKey(privateKey);
-        auto keyText=terminatedSecret(privateKey,1048576),phrase=terminatedSecret(passphrase,4096);
-        ssh_key raw=nullptr;
-        const auto result=ssh_pki_import_privkey_base64(reinterpret_cast<const char*>(keyText.bytes().data()),
-            reinterpret_cast<const char*>(phrase.bytes().data()),&denyImplicitPrompt,nullptr,&raw);
-        std::unique_ptr<ssh_key_struct,decltype(&ssh_key_free)> key(raw,&ssh_key_free);
-        if(result!=SSH_OK||!key||!ssh_key_is_private(key.get()))throw SessionError();
-        unsigned char* actualHash=nullptr;std::size_t hashLength=0;
-        const auto hashResult=ssh_get_publickey_hash(key.get(),SSH_PUBLICKEY_HASH_SHA256,&actualHash,&hashLength);
-        struct HashCleanup {unsigned char*& value;~HashCleanup(){ssh_clean_pubkey_hash(&value);}} cleanup{actualHash};
-        if(hashResult!=SSH_OK||!actualHash||hashLength!=admittedHash.size()||
-            std::memcmp(actualHash,admittedHash.data(),hashLength)!=0)throw SessionError();
-        switch(ssh_key_type(key.get())) {
-        case SSH_KEYTYPE_ED25519: case SSH_KEYTYPE_ECDSA_P256: case SSH_KEYTYPE_ECDSA_P384:
-        case SSH_KEYTYPE_ECDSA_P521: case SSH_KEYTYPE_RSA: break;
-        default: throw SessionError();
-        }
-        if(!certificate.empty()) {
-            if(certificate.size()>65536||certificate.find('\0')!=std::string_view::npos)throw SessionError();
-            while(!certificate.empty()&&(certificate.back()=='\r'||certificate.back()=='\n'))certificate.remove_suffix(1);
-            if(!validText(certificate,65536))throw SessionError();
-            const auto separator=certificate.find(' ');
-            if(separator==std::string_view::npos)throw SessionError();
-            const std::string algorithm(certificate.substr(0,separator));
-            const auto type=ssh_key_type_from_name(algorithm.c_str());
-            switch(type) {
-            case SSH_KEYTYPE_ED25519_CERT01: case SSH_KEYTYPE_ECDSA_P256_CERT01:
-            case SSH_KEYTYPE_ECDSA_P384_CERT01: case SSH_KEYTYPE_ECDSA_P521_CERT01:
-            case SSH_KEYTYPE_RSA_CERT01: break;
+        std::unique_ptr<ssh_key_struct,decltype(&ssh_key_free)> key(nullptr,&ssh_key_free);
+        {
+            const KeyImportPermit permit(control);
+            const auto admittedHash=admitOpenSshKey(privateKey);
+            auto keyText=terminatedSecret(privateKey,1048576),phrase=terminatedSecret(passphrase,4096);
+            ssh_key raw=nullptr;
+            const auto result=ssh_pki_import_privkey_base64(reinterpret_cast<const char*>(keyText.bytes().data()),
+                reinterpret_cast<const char*>(phrase.bytes().data()),&denyImplicitPrompt,nullptr,&raw);
+            key.reset(raw);
+            if(result!=SSH_OK||!key||!ssh_key_is_private(key.get()))throw SessionError();
+            unsigned char* actualHash=nullptr;std::size_t hashLength=0;
+            const auto hashResult=ssh_get_publickey_hash(key.get(),SSH_PUBLICKEY_HASH_SHA256,&actualHash,&hashLength);
+            struct HashCleanup {unsigned char*& value;~HashCleanup(){ssh_clean_pubkey_hash(&value);}} cleanup{actualHash};
+            if(hashResult!=SSH_OK||!actualHash||hashLength!=admittedHash.size()||
+                std::memcmp(actualHash,admittedHash.data(),hashLength)!=0)throw SessionError();
+            switch(ssh_key_type(key.get())) {
+            case SSH_KEYTYPE_ED25519: case SSH_KEYTYPE_ECDSA_P256: case SSH_KEYTYPE_ECDSA_P384:
+            case SSH_KEYTYPE_ECDSA_P521: case SSH_KEYTYPE_RSA: break;
             default: throw SessionError();
             }
-            certificate.remove_prefix(separator+1);
-            while(!certificate.empty()&&certificate.front()==' ')certificate.remove_prefix(1);
-            const std::string body(certificate.substr(0,certificate.find(' ')));
-            ssh_key rawCertificate=nullptr;
-            const auto imported=ssh_pki_import_cert_base64(body.c_str(),type,&rawCertificate);
-            std::unique_ptr<ssh_key_struct,decltype(&ssh_key_free)> cert(rawCertificate,&ssh_key_free);
-            if(imported!=SSH_OK||!cert||ssh_pki_copy_cert_to_privkey(cert.get(),key.get())!=SSH_OK)throw SessionError();
-        }
+            if(!certificate.empty()) {
+                if(certificate.size()>65536||certificate.find('\0')!=std::string_view::npos)throw SessionError();
+                while(!certificate.empty()&&(certificate.back()=='\r'||certificate.back()=='\n'))certificate.remove_suffix(1);
+                if(!validText(certificate,65536))throw SessionError();
+                const auto separator=certificate.find(' ');
+                if(separator==std::string_view::npos)throw SessionError();
+                const std::string algorithm(certificate.substr(0,separator));
+                const auto type=ssh_key_type_from_name(algorithm.c_str());
+                switch(type) {
+                case SSH_KEYTYPE_ED25519_CERT01: case SSH_KEYTYPE_ECDSA_P256_CERT01:
+                case SSH_KEYTYPE_ECDSA_P384_CERT01: case SSH_KEYTYPE_ECDSA_P521_CERT01:
+                case SSH_KEYTYPE_RSA_CERT01: break;
+                default: throw SessionError();
+                }
+                certificate.remove_prefix(separator+1);
+                while(!certificate.empty()&&certificate.front()==' ')certificate.remove_prefix(1);
+                const std::string body(certificate.substr(0,certificate.find(' ')));
+                ssh_key rawCertificate=nullptr;
+                const auto imported=ssh_pki_import_cert_base64(body.c_str(),type,&rawCertificate);
+                std::unique_ptr<ssh_key_struct,decltype(&ssh_key_free)> cert(rawCertificate,&ssh_key_free);
+                if(imported!=SSH_OK||!cert||ssh_pki_copy_cert_to_privkey(cert.get(),key.get())!=SSH_OK)throw SessionError();
+            }
+        } // Release CPU admission before waiting for network authentication.
         if(retry([&] { return ssh_userauth_publickey(session_,nullptr,key.get()); }, SSH_AUTH_AGAIN, control)!=SSH_AUTH_SUCCESS)throw SessionError();
         state_=State::Authenticated;
     } catch(...) {state_=State::Failed;throw;}
@@ -234,6 +239,37 @@ void Session::write(std::span<const std::byte> bytes, OperationControl control) 
         written+=static_cast<std::size_t>(result);
     }
     checked(retry([&] { return ssh_blocking_flush(session_, 0); }, SSH_AGAIN, control));
+}
+bool Session::flushSome(std::stop_token stop) {
+    require(State::Shell);
+    if (stop.stop_requested()) failed();
+    const auto result = ssh_blocking_flush(session_, 0);
+    if (result == SSH_AGAIN) return false;
+    checked(result);
+    return true;
+}
+std::size_t Session::writeSome(std::span<const std::byte> bytes, std::stop_token stop) {
+    require(State::Shell);
+    if (stop.stop_requested()) failed();
+    if (bytes.size() > 16384) throw SessionError();
+    if (bytes.empty()) return 0;
+    // Do not append another payload behind a socket backlog. Even a large
+    // remote channel window must not turn repeated writes into unbounded memory.
+    if (!flushSome(stop)) return 0;
+    const auto count = ssh_channel_write(channel_, bytes.data(), static_cast<std::uint32_t>(bytes.size()));
+    if (count == 0 || count == SSH_AGAIN) return 0;
+    if (count < 0 || static_cast<std::size_t>(count) > bytes.size()) failed();
+    return static_cast<std::size_t>(count);
+}
+std::size_t Session::readSome(std::span<std::byte> destination, bool standardError, std::stop_token stop) {
+    require(State::Shell);
+    if (stop.stop_requested()) failed();
+    if (destination.empty() || destination.size() > 65536) throw SessionError();
+    const auto count = ssh_channel_read_nonblocking(channel_, destination.data(),
+        static_cast<std::uint32_t>(destination.size()), standardError ? 1 : 0);
+    if (count == 0 || count == SSH_AGAIN || count == SSH_EOF) return 0;
+    if (count < 0 || static_cast<std::size_t>(count) > destination.size()) failed();
+    return static_cast<std::size_t>(count);
 }
 std::vector<std::byte> Session::read(int timeoutMilliseconds, std::stop_token stop) {
     require(State::Shell);
